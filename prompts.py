@@ -34,3 +34,24 @@ def format_goal_gen_user_prompt(context: str):
     }
     ]
     }"""
+
+CHOOSE_MEME_TEMPLATE_SYSTEM_PROMPT = """You are an expert meme curator with deep knowledge of popular meme templates and their emotional resonance. Your role is to select appropriate meme templates that can effectively convey specific messaging goals. For each goal, suggest exactly 3 well-known meme templates that would effectively communicate the intended message, and explain why each template is a good fit for the goal's emotion, message, tone, and intended impact."""
+
+def format_choose_meme_template_choice_user_prompt(goal: dict):
+    return """Given this meme goal:
+        {input_goal_json}
+        Suggest exactly 3 meme templates that would work well for this goal. Return your response in this exact JSON array format, with no additional text:
+        [
+        {
+        "meme_template": "name of the meme template",
+        "explanation": "explanation of why this template fits the goal"
+        },
+        {
+        "meme_template": "name of the meme template",
+        "explanation": "explanation of why this template fits the goal"
+        },
+        {
+        "meme_template": "name of the meme template",
+        "explanation": "explanation of why this template fits the goal"
+        }
+        ]"""
