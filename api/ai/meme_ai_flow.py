@@ -190,6 +190,73 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
         logger.error(f"Error finding similar templates: {str(e)}")
         raise
 
+def get_template_meme_examples(template_id: int) -> dict:
+    """
+    Get example memes for a template:
+    - Top 4 memes with highest thumbs up count
+    - Bottom 4 memes with highest thumbs down count
+    Returns dict with 'most_liked' and 'most_disliked' lists.
+    """
+    try:
+        conn = psycopg2.connect(
+            dbname=os.getenv("POSTGRES_DB"),
+            user=os.getenv("POSTGRES_USER"),
+            password=os.getenv("POSTGRES_PASSWORD"),
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=os.getenv("POSTGRES_PORT", "5432")
+        )
+        
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Get top 4 most thumbs up memes
+            cur.execute("""
+                SELECT 
+                    id,
+                    context,
+                    text_box_1,
+                    text_box_2,
+                    text_box_3,
+                    text_box_4,
+                    text_box_5,
+                    meme_cdn_url,
+                    thumbs_up,
+                    thumbs_down
+                FROM memes 
+                WHERE template_id = %s
+                ORDER BY thumbs_up DESC
+                LIMIT 4
+            """, (template_id,))
+            most_liked = cur.fetchall()
+            
+            # Get top 4 most thumbs down memes
+            cur.execute("""
+                SELECT 
+                    id,
+                    context,
+                    text_box_1,
+                    text_box_2,
+                    text_box_3,
+                    text_box_4,
+                    text_box_5,
+                    meme_cdn_url,
+                    thumbs_up,
+                    thumbs_down
+                FROM memes 
+                WHERE template_id = %s
+                ORDER BY thumbs_down DESC
+                LIMIT 4
+            """, (template_id,))
+            most_disliked = cur.fetchall()
+            
+        conn.close()
+        return {
+            'most_liked': [dict(r) for r in most_liked],
+            'most_disliked': [dict(r) for r in most_disliked]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting template meme examples: {str(e)}")
+        raise
+
 if __name__ == "__main__":
     TEST_CONTEXT = "Insecure people criticize when youre doing things that they dont"
     try:
