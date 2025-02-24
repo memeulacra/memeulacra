@@ -1,0 +1,6 @@
+python-dotenv
+asyncpg
+anthropic
+httpx
+torch
+transformers
