@@ -56,4 +56,7 @@ CREATE TABLE user_interactions (
 CREATE INDEX ON memes USING ivfflat (embedding vector_l2_ops);
 CREATE INDEX ON memes(user_id);
 CREATE INDEX ON user_interactions(user_id);
-CREATE INDEX ON user_interactions(meme_id)
+CREATE INDEX ON user_interactions(meme_id);
+
+-- Create vector similarity search index for meme templates
+CREATE INDEX ON meme_templates USING ivfflat (description_embedding vector_cosine_ops);
