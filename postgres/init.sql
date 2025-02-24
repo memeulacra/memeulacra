@@ -11,8 +11,12 @@ CREATE TABLE meme_templates (
     example_texts TEXT[],
     tags TEXT[],
     popularity_score FLOAT DEFAULT 0,
+    embedding VECTOR(1024),  -- BGE model outputs 1024-dimensional embeddings
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create index for similarity search on meme_templates
+CREATE INDEX meme_templates_embedding_idx ON meme_templates USING ivfflat (embedding vector_l2_ops);
 
 -- Create users table
 CREATE TABLE users (
