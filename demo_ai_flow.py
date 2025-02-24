@@ -101,7 +101,7 @@ def get_embedding(text: str) -> list:
     # Convert to numpy array for pgvector
     return np.array(embeddings[0].tolist())
 
-def generate_meme_texts(template: dict, goal: dict) -> dict:
+def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
     """Generate text variations for a meme template based on the goal"""
     VENICE_API_KEY = os.getenv("VENICE_API_TOKEN")
     if not VENICE_API_KEY:
@@ -113,7 +113,7 @@ def generate_meme_texts(template: dict, goal: dict) -> dict:
         "model": "llama-3.3-70b",
         "messages": [
             {"role": "system", "content": GENERATE_MEME_TEXT_SYSTEM_PROMPT},
-            {"role": "user", "content": format_generate_meme_text_user_prompt(template, goal)}
+            {"role": "user", "content": format_generate_meme_text_user_prompt(template, goal, context)}
         ],
         "venice_parameters": {
             "enable_web_search": 'on',
@@ -208,7 +208,7 @@ if __name__ == "__main__":
                 print(f"\n\tMeme template {template['name']} (sim {template['similarity']:.3f})")
                 
                 # Generate text variations for this template
-                text_variations = generate_meme_texts(template, goal)
+                text_variations = generate_meme_texts(template, goal, TEST_CONTEXT)
                 for i, choice in enumerate(text_variations["text_choices"], 1):
                     if choice["box_count"] == 1:
                         print(f"\t\tText Choice {i}: {choice['text1']}")

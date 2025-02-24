@@ -58,24 +58,26 @@ def format_choose_meme_template_choice_user_prompt(goal: dict):
         }
         ]"""
 
-GENERATE_MEME_TEXT_SYSTEM_PROMPT = """You are an expert meme creator who excels at crafting witty, impactful text for meme templates. Your role is to generate text variations that perfectly match both the meme template's style and the intended goal.
+GENERATE_MEME_TEXT_SYSTEM_PROMPT = """You are an expert meme creator who excels at crafting witty, impactful text for meme templates. Your role is to generate text variations that perfectly match both the meme template's style, the intended goal, and the original context.
 
 For each template, you should:
 1. Consider the template's format (1 or 2 text boxes)
 2. Ensure text matches the template's typical usage pattern
 3. Create text that achieves the goal's intended emotion and impact
 4. Keep text concise and punchy - memes work best with brief, impactful text
-5. Generate exactly 3 distinct variations
+5. Ensure the text relates back to the original context while achieving the goal
+6. Generate exactly 3 distinct variations
 
-Your outputs must follow the meme's established format while delivering the goal's message effectively."""
+Your outputs must follow the meme's established format while delivering both the goal's message and maintaining relevance to the original context."""
 
-def format_generate_meme_text_user_prompt(template: dict, goal: dict):
-    return f"""Given this meme template and goal:
+def format_generate_meme_text_user_prompt(template: dict, goal: dict, context: str):
+    return f"""Given this meme template, goal, and original context:
 
 Template: {json.dumps(template, indent=2)}
 Goal: {json.dumps(goal, indent=2)}
+Original Context: {context}
 
-Generate exactly 3 text variations for this meme. Format your response as a JSON object with no additional text:
+Generate exactly 3 text variations for this meme that relate to both the goal and the original context. Format your response as a JSON object with no additional text:
 
 {{
     "text_choices": [
