@@ -289,30 +289,112 @@ def get_template_meme_examples(template_id: int) -> dict:
         logger.error(f"Error getting template meme examples: {str(e)}")
         raise
 
-if __name__ == "__main__":
-    TEST_CONTEXT = "Insecure people criticize when youre doing things that they dont"
+def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
+    """
+    Generate memes for a list of UUIDs using the given context.
+    Returns a list of dicts containing UUID and text boxes.
+    """
     try:
-        # Stage 1: Generate meme goals
-        goals = generate_meme_goals(TEST_CONTEXT)
-        print("\nGenerated Meme Goals:")
-        print(json.dumps(goals, indent=2))
+        # Connect to database
+        conn = psycopg2.connect(
+            dbname=os.getenv("POSTGRES_DB"),
+            user=os.getenv("POSTGRES_USER"),
+            password=os.getenv("POSTGRES_PASSWORD"),
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=os.getenv("POSTGRES_PORT", "5432")
+        )
         
-        # Stage 2: For each goal, find similar templates and generate text
-        print("\nFinding Similar Templates and Generating Text for each goal:")
+        # Verify all UUIDs exist
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id FROM memes 
+                WHERE id = ANY(%s)
+            """, (uuids,))
+            found_uuids = [str(r[0]) for r in cur.fetchall()]
+            if len(found_uuids) != len(uuids):
+                missing = set(uuids) - set(found_uuids)
+                raise ValueError(f"UUIDs not found in database: {missing}")
+
+        # Generate meme goals
+        goals = generate_meme_goals(context)
+        
+        # Generate all possible memes
+        generated_memes = []
         for goal in goals["meme_goals"]:
-            print(f"\nGoal: {goal['goal']}")
             templates = find_similar_templates(goal)
             
             for template in templates:
-                print(f"\n\tMeme template {template['name']} (sim {template['similarity']:.3f})")
-                
-                # Generate text variations for this template
-                text_variations = generate_meme_texts(template, goal, TEST_CONTEXT)
-                for i, choice in enumerate(text_variations["text_choices"], 1):
-                    if choice["box_count"] == 1:
-                        print(f"\t\tText Choice {i}: {choice['text1']}")
-                    else:
-                        print(f"\t\tText Choice {i}: {choice['text1']} | {choice['text2']}")
+                text_variations = generate_meme_texts(template, goal, context)
+                for choice in text_variations["text_choices"]:
+                    # Convert text choice to array format
+                    text_boxes = [None] * 7  # Initialize with 7 None values
+                    for i in range(1, 8):
+                        if f"text{i}" in choice:
+                            text_boxes[i-1] = choice[f"text{i}"]
+                    
+                    generated_memes.append({
+                        "template_id": template["id"],
+                        "text_boxes": text_boxes
+                    })
+        
+        # Match UUIDs with generated memes
+        uuid_memes = []
+        for i, uuid in enumerate(uuids):
+            # Use modulo to cycle through generated memes if we have more UUIDs than memes
+            meme = generated_memes[i % len(generated_memes)]
+            uuid_memes.append({
+                "uuid": uuid,
+                "template_id": meme["template_id"],
+                "text_boxes": meme["text_boxes"]
+            })
             
+        # Update database with generated memes
+        with conn.cursor() as cur:
+            for meme in uuid_memes:
+                cur.execute("""
+                    UPDATE memes
+                    SET 
+                        template_id = %s,
+                        text_box_1 = %s,
+                        text_box_2 = %s,
+                        text_box_3 = %s,
+                        text_box_4 = %s,
+                        text_box_5 = %s,
+                        text_box_6 = %s,
+                        text_box_7 = %s
+                    WHERE id = %s
+                """, (
+                    meme["template_id"],
+                    meme["text_boxes"][0],
+                    meme["text_boxes"][1],
+                    meme["text_boxes"][2],
+                    meme["text_boxes"][3],
+                    meme["text_boxes"][4],
+                    meme["text_boxes"][5],
+                    meme["text_boxes"][6],
+                    meme["uuid"]
+                ))
+            conn.commit()
+            
+        conn.close()
+        
+        # Return results in specified format
+        return [{
+            "uuid": meme["uuid"],
+            "text_boxes": meme["text_boxes"]
+        } for meme in uuid_memes]
+        
+    except Exception as e:
+        logger.error(f"Failed to generate memes for UUIDs: {str(e)}")
+        raise
+
+if __name__ == "__main__":
+    # Test the batch generation
+    TEST_CONTEXT = "Insecure people criticize when youre doing things that they dont"
+    TEST_UUIDS = ["test-uuid-1", "test-uuid-2"]  # Replace with real UUIDs for testing
+    try:
+        results = generate_memes_for_uuids(TEST_CONTEXT, TEST_UUIDS)
+        print("\nGenerated Memes:")
+        print(json.dumps(results, indent=2))
     except Exception as e:
         logger.error(f"Failed to process: {str(e)}")
