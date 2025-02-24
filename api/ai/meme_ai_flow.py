@@ -102,10 +102,39 @@ def get_embedding(text: str) -> list:
     return np.array(embeddings[0].tolist())
 
 def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
-    """Generate text variations for a meme template based on the goal"""
+    """Generate text variations for a meme template based on the goal and examples"""
     VENICE_API_KEY = os.getenv("VENICE_API_TOKEN")
     if not VENICE_API_KEY:
         raise ValueError("VENICE_API_TOKEN environment variable is not set")
+
+    # Get example memes for this template if available
+    examples = None
+    try:
+        # Extract template ID from the template object
+        template_id = None
+        conn = psycopg2.connect(
+            dbname=os.getenv("POSTGRES_DB"),
+            user=os.getenv("POSTGRES_USER"),
+            password=os.getenv("POSTGRES_PASSWORD"),
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=os.getenv("POSTGRES_PORT", "5432")
+        )
+        
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Get template ID by name
+            cur.execute("""
+                SELECT id 
+                FROM meme_templates 
+                WHERE name = %s
+            """, (template['name'],))
+            result = cur.fetchone()
+            if result:
+                template_id = result['id']
+                examples = get_template_meme_examples(template_id)
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Failed to get meme examples: {str(e)}")
+        # Continue without examples if there's an error
 
     URL = "https://api.venice.ai/api/v1/chat/completions"
     
@@ -113,7 +142,7 @@ def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
         "model": "llama-3.3-70b",
         "messages": [
             {"role": "system", "content": GENERATE_MEME_TEXT_SYSTEM_PROMPT},
-            {"role": "user", "content": format_generate_meme_text_user_prompt(template, goal, context)}
+            {"role": "user", "content": format_generate_meme_text_user_prompt(template, goal, context, examples)}
         ],
         "venice_parameters": {
             "enable_web_search": 'on',

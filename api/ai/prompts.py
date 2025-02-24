@@ -66,18 +66,38 @@ For each template, you should:
 3. Create text that achieves the goal's intended emotion and impact
 4. Keep text concise and punchy - memes work best with brief, impactful text
 5. Ensure the text relates back to the original context while achieving the goal
-6. Generate exactly 3 distinct variations
+6. Study the provided successful examples to understand what resonates with users
+7. Learn from less successful examples to avoid common pitfalls
+8. Generate exactly 3 distinct variations that incorporate these insights
 
-Your outputs must follow the meme's established format while delivering both the goal's message and maintaining relevance to the original context."""
+When analyzing examples:
+- Look for patterns in successful memes' text structure and tone
+- Note how successful memes balance humor with message delivery
+- Identify what makes certain memes less effective
+- Consider how text length and complexity affects engagement
 
-def format_generate_meme_text_user_prompt(template: dict, goal: dict, context: str):
+Your outputs must follow the meme's established format while delivering both the goal's message and maintaining relevance to the original context, informed by real engagement data from similar memes."""
+
+def format_generate_meme_text_user_prompt(template: dict, goal: dict, context: str, examples: dict = None):
+    examples_section = ""
+    if examples and (examples.get('most_liked') or examples.get('most_disliked')):
+        examples_section = "\nLearn from these examples:\n\nHighly Successful Examples:\n"
+        for ex in examples.get('most_liked', []):
+            text_boxes = [ex.get(f'text_box_{i}') for i in range(1, 6) if ex.get(f'text_box_{i}')]
+            examples_section += f"- Thumbs up: {ex.get('thumbs_up', 0)}\n  Text: {' | '.join(text_boxes)}\n"
+        
+        examples_section += "\nLess Successful Examples to Learn From:\n"
+        for ex in examples.get('most_disliked', []):
+            text_boxes = [ex.get(f'text_box_{i}') for i in range(1, 6) if ex.get(f'text_box_{i}')]
+            examples_section += f"- Thumbs down: {ex.get('thumbs_down', 0)}\n  Text: {' | '.join(text_boxes)}\n"
+
     return f"""Given this meme template, goal, and original context:
 
 Template: {json.dumps(template, indent=2)}
 Goal: {json.dumps(goal, indent=2)}
-Original Context: {context}
+Original Context: {context}{examples_section}
 
-Generate exactly 3 text variations for this meme that relate to both the goal and the original context. Format your response as a JSON object with no additional text:
+Generate exactly 3 text variations for this meme that relate to both the goal and the original context. Use insights from the successful examples while avoiding patterns from less successful ones. Format your response as a JSON object with no additional text:
 
 {{
     "text_choices": [
