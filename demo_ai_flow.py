@@ -4,8 +4,10 @@ import json
 import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from pgvector.psycopg2 import register_vector
 import numpy as np
-from openai import OpenAI
+import torch
+from transformers import AutoTokenizer, AutoModel
 from dotenv import load_dotenv
 from prompts import (
     GOAL_GEN_SYSTEM_PROMPT, 
@@ -69,14 +71,33 @@ def generate_meme_goals(context: str):
         logger.error(f"Error generating meme goals: {str(e)}")
         raise
 
+# Initialize the model and tokenizer globally for reuse
+model_name = "BAAI/bge-large-en-v1.5"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModel.from_pretrained(model_name)
+model.eval()  # Set the model to evaluation mode
+
 def get_embedding(text: str) -> list:
-    """Get embedding for text using OpenAI's API"""
-    client = OpenAI()
-    response = client.embeddings.create(
-        model="text-embedding-ada-002",
-        input=text
+    """Generate embedding for text using BGE model"""
+    # Tokenize the input text
+    encoded_input = tokenizer(
+        text, 
+        padding=True, 
+        truncation=True, 
+        max_length=512,  # Limit token length
+        return_tensors='pt'
     )
-    return response.data[0].embedding
+    
+    # Generate embeddings
+    with torch.no_grad():
+        model_output = model(**encoded_input)
+        # Get the embeddings from the last hidden state
+        embeddings = model_output.last_hidden_state[:, 0, :]
+        # Normalize the embeddings
+        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+        
+    # Convert to numpy array for pgvector
+    return np.array(embeddings[0].tolist())
 
 def find_similar_templates(goal: dict, top_k: int = 3) -> list:
     """Find similar meme templates using vector similarity search"""
@@ -85,7 +106,7 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
         goal_text = f"{goal['goal']} {goal.get('explanation', '')}"
         goal_embedding = get_embedding(goal_text)
         
-        # Connect to database
+        # Connect to database and register vector type
         conn = psycopg2.connect(
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
@@ -93,6 +114,7 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
             host=os.getenv("POSTGRES_HOST", "localhost"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
+        register_vector(conn)
         
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Perform cosine similarity search
@@ -103,10 +125,10 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
                     image_url,
                     text_box_count,
                     example_texts,
-                    1 - (description_embedding <=> %s) as similarity
+                    1 - (embedding <-> %s) as similarity
                 FROM meme_templates
-                WHERE description_embedding IS NOT NULL
-                ORDER BY description_embedding <=> %s
+                WHERE embedding IS NOT NULL
+                ORDER BY embedding <-> %s
                 LIMIT %s
             """, (goal_embedding, goal_embedding, top_k))
             
@@ -131,8 +153,9 @@ if __name__ == "__main__":
         print("\nFinding Similar Templates for each goal:")
         for goal in goals["meme_goals"]:
             templates = find_similar_templates(goal)
-            print(f"\nTemplates for goal: {goal['goal']}")
-            print(json.dumps(templates, indent=2))
+            print(f"\nGoal: {goal['goal']}")
+            for template in templates:
+                print(f"  {template['name']:<40} (similarity: {template['similarity']:.3f})")
             
     except Exception as e:
         logger.error(f"Failed to process: {str(e)}")

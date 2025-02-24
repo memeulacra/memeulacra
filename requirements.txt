@@ -1,11 +1,10 @@
 python-dotenv
+requests
+psycopg2-binary
+numpy
+torch
+transformers
 asyncpg
 anthropic
 httpx
-torch
-transformers
-
-requests
-psycopg2-binary
-openai
-numpy
+pgvector
