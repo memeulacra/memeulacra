@@ -277,10 +277,13 @@ def get_template_meme_examples(template_id: int) -> dict:
             most_disliked = cur.fetchall()
             
         conn.close()
-        return {
+        examples = {
             'most_liked': [dict(r) for r in most_liked],
             'most_disliked': [dict(r) for r in most_disliked]
         }
+        print("\nTemplate Examples:")
+        print(json.dumps(examples, indent=2))
+        return examples
         
     except Exception as e:
         logger.error(f"Error getting template meme examples: {str(e)}")
