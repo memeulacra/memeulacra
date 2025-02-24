@@ -40,6 +40,8 @@ CREATE TABLE memes (
     meme_cdn_url TEXT NOT NULL,
     user_id INTEGER REFERENCES users(id),
     embedding VECTOR(1536), -- Using 1536 dimensions (OpenAI's text-embedding-ada-002 size)
+    thumbs_up INTEGER NOT NULL DEFAULT 0,
+    thumbs_down INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -59,4 +61,4 @@ CREATE INDEX ON user_interactions(user_id);
 CREATE INDEX ON user_interactions(meme_id);
 
 -- Create vector similarity search index for meme templates
-CREATE INDEX ON meme_templates USING ivfflat (description_embedding vector_cosine_ops);
+CREATE INDEX ON meme_templates USING ivfflat (embedding vector_cosine_ops);
