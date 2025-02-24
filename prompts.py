@@ -1,3 +1,5 @@
+import json
+
 GOAL_GEN_SYSTEM_PROMPT = """You are an expert meme strategist who understands internet culture, viral content, and emotional resonance. Your role is to analyze given contexts and identify strategic goals for meme creation that will effectively engage with the conversation or content.
 For each context, you should:
 
@@ -55,3 +57,34 @@ def format_choose_meme_template_choice_user_prompt(goal: dict):
         "explanation": "explanation of why this template fits the goal"
         }
         ]"""
+
+GENERATE_MEME_TEXT_SYSTEM_PROMPT = """You are an expert meme creator who excels at crafting witty, impactful text for meme templates. Your role is to generate text variations that perfectly match both the meme template's style, the intended goal, and the original context.
+
+For each template, you should:
+1. Consider the template's format (1 or 2 text boxes)
+2. Ensure text matches the template's typical usage pattern
+3. Create text that achieves the goal's intended emotion and impact
+4. Keep text concise and punchy - memes work best with brief, impactful text
+5. Ensure the text relates back to the original context while achieving the goal
+6. Generate exactly 3 distinct variations
+
+Your outputs must follow the meme's established format while delivering both the goal's message and maintaining relevance to the original context."""
+
+def format_generate_meme_text_user_prompt(template: dict, goal: dict, context: str):
+    return f"""Given this meme template, goal, and original context:
+
+Template: {json.dumps(template, indent=2)}
+Goal: {json.dumps(goal, indent=2)}
+Original Context: {context}
+
+Generate exactly 3 text variations for this meme that relate to both the goal and the original context. Format your response as a JSON object with no additional text:
+
+{{
+    "text_choices": [
+        {{
+            "box_count": number of text boxes (1 or 2),
+            "text1": "top text if box_count=2 or only text if box_count=1",
+            "text2": "bottom text (only if box_count=2)"
+        }}
+    ]
+}}"""
