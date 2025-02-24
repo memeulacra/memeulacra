@@ -14,6 +14,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 EXPOSE 3005
+ENV NEXT_PUBLIC_BUILD_ID=1
 ENV PORT=3005
 ENV NODE_ENV=production
 CMD ["npm", "run", "start"]
