@@ -6,8 +6,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  Wallet,
+  ConnectWallet,
+  WalletDropdown,
+  WalletDropdownLink,
+  WalletDropdownDisconnect,
+} from '@coinbase/onchainkit/wallet'
+import {
+  Address,
+  Avatar,
+  Name,
+  Identity,
+  EthBalance,
+} from '@coinbase/onchainkit/identity'
+import { useAccount } from 'wagmi'
+import { WalletAuth } from './walletAuth' // Import the WalletAuth component
 
 export default function ProfilePage() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [profile, setProfile] = useState({
     email: 'user@example.com',
     npub: 'npub1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
@@ -18,6 +35,18 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   // Flag to signal the component has mounted (client-only)
   const [isMounted, setIsMounted] = useState(false)
+  const { address, isConnected } = useAccount()
+
+  useEffect(() => {
+    console.log('address:', address, 'isConnected:', isConnected)
+    // Update the ETH address in the profile when connected
+    if (address) {
+      setProfile(prev => ({
+        ...prev,
+        ethAddress: address
+      }))
+    }
+  }, [address, isConnected])
 
   useEffect(() => {
     setIsMounted(true)
@@ -31,10 +60,6 @@ export default function ProfilePage() {
 
   return (
     <div className="container mx-auto p-4">
-      {/*
-          On the first render (during SSR) we render a static div.
-          Once mounted on the client, we show the animated content.
-      */}
       {isMounted ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -48,6 +73,20 @@ export default function ProfilePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="space-y-4 flex justify-center">
+                <Wallet>
+                  <ConnectWallet />
+                  <WalletDropdown>
+                    <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
+                      <Avatar />
+                      <Name />
+                      <Address />
+                      <EthBalance />
+                    </Identity>
+                    <WalletDropdownDisconnect />
+                  </WalletDropdown>
+                </Wallet>
+              </div>
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="email">Email</Label>
@@ -119,7 +158,6 @@ export default function ProfilePage() {
           </Card>
         </motion.div>
       ) : (
-        // Render a fallback that matches the non-animated structure
         <div className="w-full max-w-2xl mx-auto">
           <Card className="border border-transparent">
             <CardHeader>
@@ -167,7 +205,7 @@ export default function ProfilePage() {
                   {isEditing ? (
                     <>
                       <Button variant="outline" onClick={() => setIsEditing(false)}>
-                        Cancel
+                                Cancel
                       </Button>
                       <Button onClick={handleSave}>Save</Button>
                     </>
@@ -180,6 +218,7 @@ export default function ProfilePage() {
           </Card>
         </div>
       )}
+      <WalletAuth />
     </div>
   )
 }

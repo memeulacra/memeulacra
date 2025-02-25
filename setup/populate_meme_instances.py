@@ -19,31 +19,33 @@ DB_CONFIG = {
     'database': 'memedb'
 }
 
-async def create_demo_users(pool: asyncpg.Pool) -> List[int]:
-    """Create 10 demo users and return their IDs"""
+async def create_demo_users(pool: asyncpg.Pool) -> List[str]:
+    """Create 10 demo users and return their UUIDs"""
     user_ids = []
     async with pool.acquire() as conn:
         for i in range(1, 11):
             username = f"Demo User {i}"
+            fake_address = f"0x{'9' * 38}{i:02d}"  # Creates addresses like 0x999999999999999999999999999999999999901
             user_id = await conn.fetchval(
-                'INSERT INTO users (username) VALUES ($1) ON CONFLICT (username) DO UPDATE SET username = $1 RETURNING id',
-                username
+                'INSERT INTO users (username, address) VALUES ($1, $2) ON CONFLICT (username) DO UPDATE SET username = $1 RETURNING id::text',
+                username,
+                fake_address
             )
             user_ids.append(user_id)
     logger.info(f"Created/verified {len(user_ids)} demo users")
     return user_ids
 
-async def get_template_id_map(pool: asyncpg.Pool) -> Dict[str, int]:
+async def get_template_id_map(pool: asyncpg.Pool) -> Dict[str, str]:
     """Create a mapping of template names to their IDs"""
     async with pool.acquire() as conn:
         rows = await conn.fetch('SELECT id, name FROM meme_templates')
-        return {row['name']: row['id'] for row in rows}
+        return {row['name']: row['id'].__str__() for row in rows}
 
 async def process_meme_file(
     file_path: str,
     pool: asyncpg.Pool,
-    template_id_map: Dict[str, int],
-    user_ids: List[int]
+    template_id_map: Dict[str, str],
+    user_ids: List[str]
 ) -> None:
     """Process a single meme JSON file"""
     try:

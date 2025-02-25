@@ -2,15 +2,22 @@
 Core AI engine for meme generation and self-learning
 
 
-## Setup
+## Setup from scratch
 
-First, create the database and api containers:
+Make a .env file with api keys with these servies:
+
+```bash
+VENICE_API_TOKEN=...
+ANTHROPIC_API_KEY=...
+```
+
+Create the database and api containers:
 
 ```commandline
 docker compose up --build
 ```
 
-Then run the setup scripts in this order
+Then run the setup script to put some demo users and imgflip meme instances into the db:
 
 ```commandline
 cd setup
@@ -21,10 +28,21 @@ pip install -r requirements.txt
 python populate_meme_instances.py
 ```
 
-At this point, good to check the database has about 100 rows in the meme_templates table.
+After that's done, we can test that the api is working:
 
-Then generate sample meme instances and scoring data from the imgflip dataset
+```commandline
+cd .. # back to project root
+cd tests
+python3 -m venv venv
 
+# optional, do this if you're still in the setup/ venv
+deactivate
+
+source venv/bin/activate
+pip install -r requirements.txt
+python test_batch_meme_generation.py
+
+# wait, this could take 1-2 minutes
 ```
-python populate_meme_instances.py
-```
+
+Then you should see new memes created in the db, and the output in the terminal should show resulting meme template ids and text boxes
