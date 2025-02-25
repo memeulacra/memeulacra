@@ -9,7 +9,7 @@ from psycopg2.extras import RealDictCursor
 from pgvector.psycopg2 import register_vector
 import numpy as np
 import torch
-from text_overlay import TextOverlay
+from ai.text_overlay import TextOverlay
 from transformers import AutoTokenizer, AutoModel
 from dotenv import load_dotenv
 from ai.prompts import (
