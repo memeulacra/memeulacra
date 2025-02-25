@@ -1,4 +1,9 @@
 version: '3.8'
+
+x-common: &common
+  environment:
+    COMPOSE_HTTP_TIMEOUT: 300
+
 services:
   db:
     build: 
@@ -13,7 +18,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
-      - ./postgres/meme_templates_202502232225.sql:/docker-entrypoint-initdb.d/02-data.sql
+    #  - ./postgres/meme_templates_202502232225.sql:/docker-entrypoint-initdb.d/02-data.sql
 
   api:
     build:
@@ -27,6 +32,7 @@ services:
       POSTGRES_DB: memedb
       POSTGRES_USER: memeuser
       POSTGRES_PASSWORD: memepass
+      POSTGRES_HOST: db
     depends_on:
       - db
 

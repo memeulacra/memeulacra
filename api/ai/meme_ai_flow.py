@@ -2,6 +2,8 @@ import os
 import requests
 import json
 import logging
+import time
+from typing import List
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from pgvector.psycopg2 import register_vector
@@ -9,7 +11,7 @@ import numpy as np
 import torch
 from transformers import AutoTokenizer, AutoModel
 from dotenv import load_dotenv
-from prompts import (
+from ai.prompts import (
     GOAL_GEN_SYSTEM_PROMPT, 
     format_goal_gen_user_prompt,
     CHOOSE_MEME_TEMPLATE_SYSTEM_PROMPT,
@@ -17,7 +19,7 @@ from prompts import (
     GENERATE_MEME_TEXT_SYSTEM_PROMPT,
     format_generate_meme_text_user_prompt
 )
-from json_repairer import JsonRepairer
+from ai.json_repairer import JsonRepairer
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -74,10 +76,17 @@ def generate_meme_goals(context: str):
         raise
 
 # Initialize the model and tokenizer globally for reuse
-model_name = "BAAI/bge-large-en-v1.5"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModel.from_pretrained(model_name)
-model.eval()  # Set the model to evaluation mode
+model_path = "/root/.cache/huggingface/hub/models--BAAI--bge-large-en-v1.5/snapshots/c43af0e0c0d29de68b4d14e2cc489aa098caf7f0"
+logger.info(f"Loading model from {model_path}")
+
+try:
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModel.from_pretrained(model_path)
+    model.eval()  # Set the model to evaluation mode
+    logger.info("Model loaded successfully")
+except Exception as e:
+    logger.error(f"Failed to load model: {str(e)}")
+    raise
 
 def get_embedding(text: str) -> list:
     """Generate embedding for text using BGE model"""
@@ -116,7 +125,7 @@ def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=os.getenv("POSTGRES_HOST", "db"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
         
@@ -189,7 +198,7 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=os.getenv("POSTGRES_HOST", "db"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
         register_vector(conn)
@@ -231,7 +240,7 @@ def get_template_meme_examples(template_id: int) -> dict:
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=os.getenv("POSTGRES_HOST", "db"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
         
@@ -300,7 +309,7 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=os.getenv("POSTGRES_HOST", "db"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
         
@@ -308,7 +317,7 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id FROM memes 
-                WHERE id = ANY(%s)
+                WHERE id = ANY(SELECT CAST(UNNEST($1::text[]) AS UUID))
             """, (uuids,))
             found_uuids = [str(r[0]) for r in cur.fetchall()]
             if len(found_uuids) != len(uuids):
@@ -362,7 +371,7 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
                         text_box_5 = %s,
                         text_box_6 = %s,
                         text_box_7 = %s
-                    WHERE id = %s
+                    WHERE id = CAST(%s AS UUID)
                 """, (
                     meme["template_id"],
                     meme["text_boxes"][0],

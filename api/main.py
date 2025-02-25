@@ -4,7 +4,7 @@ from typing import List, Optional
 import os
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
-from api.ai.meme_ai_flow import generate_memes_for_uuids
+from ai.meme_ai_flow import generate_memes_for_uuids
 
 load_dotenv()
 
