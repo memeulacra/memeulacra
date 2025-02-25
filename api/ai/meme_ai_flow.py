@@ -207,6 +207,7 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
             # Perform cosine similarity search
             cur.execute("""
                 SELECT 
+                    id,
                     name,
                     description,
                     image_url,
@@ -317,7 +318,7 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id FROM memes 
-                WHERE id = ANY(SELECT CAST(UNNEST($1::text[]) AS UUID))
+                WHERE id = ANY(SELECT CAST(UNNEST(%s::text[]) AS UUID))
             """, (uuids,))
             found_uuids = [str(r[0]) for r in cur.fetchall()]
             if len(found_uuids) != len(uuids):
@@ -326,14 +327,26 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
 
         # Generate meme goals
         goals = generate_meme_goals(context)
+        logger.info(f"Generated meme goals: {json.dumps(goals, indent=2)}")
+        
+        if "meme_goals" not in goals:
+            logger.error(f"No meme_goals in response: {goals}")
+            raise ValueError("No meme goals were generated")
         
         # Generate all possible memes
         generated_memes = []
         for goal in goals["meme_goals"]:
             templates = find_similar_templates(goal)
+            logger.info(f"Found similar templates for goal '{goal.get('goal', '')}': {json.dumps(templates, indent=2)}")
             
             for template in templates:
                 text_variations = generate_meme_texts(template, goal, context)
+                logger.info(f"Generated text variations: {json.dumps(text_variations, indent=2)}")
+                
+                if "text_choices" not in text_variations:
+                    logger.error(f"No text_choices in variations: {text_variations}")
+                    continue
+                    
                 for choice in text_variations["text_choices"]:
                     # Convert text choice to array format
                     text_boxes = [None] * 7  # Initialize with 7 None values
@@ -341,16 +354,30 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
                         if f"text{i}" in choice:
                             text_boxes[i-1] = choice[f"text{i}"]
                     
-                    generated_memes.append({
-                        "template_id": template["id"],
-                        "text_boxes": text_boxes
-                    })
+                    try:
+                        if "id" not in template:
+                            logger.error(f"Template missing id field: {template}")
+                            continue
+                        generated_memes.append({
+                            "template_id": template["id"],
+                            "text_boxes": text_boxes
+                        })
+                    except Exception as e:
+                        logger.error(f"Error processing template: {template}")
+                        logger.error(f"Error details: {str(e)}")
+                        continue
         
+        # Check if we have any generated memes
+        if not generated_memes:
+            logger.error("No memes were generated. Templates or text generation may have failed.")
+            raise ValueError("No memes were generated")
+
         # Match UUIDs with generated memes
         uuid_memes = []
         for i, uuid in enumerate(uuids):
             # Use modulo to cycle through generated memes if we have more UUIDs than memes
             meme = generated_memes[i % len(generated_memes)]
+            logger.info(f"Matching UUID {uuid} with template_id {meme['template_id']}")
             uuid_memes.append({
                 "uuid": uuid,
                 "template_id": meme["template_id"],
