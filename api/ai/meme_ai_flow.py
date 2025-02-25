@@ -2,6 +2,8 @@ import os
 import requests
 import json
 import logging
+import time
+from typing import List
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from pgvector.psycopg2 import register_vector
@@ -9,7 +11,7 @@ import numpy as np
 import torch
 from transformers import AutoTokenizer, AutoModel
 from dotenv import load_dotenv
-from prompts import (
+from ai.prompts import (
     GOAL_GEN_SYSTEM_PROMPT, 
     format_goal_gen_user_prompt,
     CHOOSE_MEME_TEMPLATE_SYSTEM_PROMPT,
@@ -17,7 +19,7 @@ from prompts import (
     GENERATE_MEME_TEXT_SYSTEM_PROMPT,
     format_generate_meme_text_user_prompt
 )
-from json_repairer import JsonRepairer
+from ai.json_repairer import JsonRepairer
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -74,10 +76,17 @@ def generate_meme_goals(context: str):
         raise
 
 # Initialize the model and tokenizer globally for reuse
-model_name = "BAAI/bge-large-en-v1.5"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModel.from_pretrained(model_name)
-model.eval()  # Set the model to evaluation mode
+model_path = "/root/.cache/huggingface/hub/models--BAAI--bge-large-en-v1.5/snapshots/c43af0e0c0d29de68b4d14e2cc489aa098caf7f0"
+logger.info(f"Loading model from {model_path}")
+
+try:
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModel.from_pretrained(model_path)
+    model.eval()  # Set the model to evaluation mode
+    logger.info("Model loaded successfully")
+except Exception as e:
+    logger.error(f"Failed to load model: {str(e)}")
+    raise
 
 def get_embedding(text: str) -> list:
     """Generate embedding for text using BGE model"""
@@ -116,7 +125,7 @@ def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=os.getenv("POSTGRES_HOST", "db"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
         
@@ -189,7 +198,7 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=os.getenv("POSTGRES_HOST", "db"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
         register_vector(conn)
@@ -198,6 +207,7 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
             # Perform cosine similarity search
             cur.execute("""
                 SELECT 
+                    id,
                     name,
                     description,
                     image_url,
@@ -231,7 +241,7 @@ def get_template_meme_examples(template_id: int) -> dict:
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=os.getenv("POSTGRES_HOST", "db"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
         
@@ -289,30 +299,138 @@ def get_template_meme_examples(template_id: int) -> dict:
         logger.error(f"Error getting template meme examples: {str(e)}")
         raise
 
-if __name__ == "__main__":
-    TEST_CONTEXT = "Insecure people criticize when youre doing things that they dont"
+def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
+    """
+    Generate memes for a list of UUIDs using the given context.
+    Returns a list of dicts containing UUID and text boxes.
+    """
     try:
-        # Stage 1: Generate meme goals
-        goals = generate_meme_goals(TEST_CONTEXT)
-        print("\nGenerated Meme Goals:")
-        print(json.dumps(goals, indent=2))
+        # Connect to database
+        conn = psycopg2.connect(
+            dbname=os.getenv("POSTGRES_DB"),
+            user=os.getenv("POSTGRES_USER"),
+            password=os.getenv("POSTGRES_PASSWORD"),
+            host=os.getenv("POSTGRES_HOST", "db"),
+            port=os.getenv("POSTGRES_PORT", "5432")
+        )
         
-        # Stage 2: For each goal, find similar templates and generate text
-        print("\nFinding Similar Templates and Generating Text for each goal:")
+        # Verify all UUIDs exist
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id FROM memes 
+                WHERE id = ANY(SELECT CAST(UNNEST(%s::text[]) AS UUID))
+            """, (uuids,))
+            found_uuids = [str(r[0]) for r in cur.fetchall()]
+            if len(found_uuids) != len(uuids):
+                missing = set(uuids) - set(found_uuids)
+                raise ValueError(f"UUIDs not found in database: {missing}")
+
+        # Generate meme goals
+        goals = generate_meme_goals(context)
+        logger.info(f"Generated meme goals: {json.dumps(goals, indent=2)}")
+        
+        if "meme_goals" not in goals:
+            logger.error(f"No meme_goals in response: {goals}")
+            raise ValueError("No meme goals were generated")
+        
+        # Generate all possible memes
+        generated_memes = []
         for goal in goals["meme_goals"]:
-            print(f"\nGoal: {goal['goal']}")
             templates = find_similar_templates(goal)
+            logger.info(f"Found similar templates for goal '{goal.get('goal', '')}': {json.dumps(templates, indent=2)}")
             
             for template in templates:
-                print(f"\n\tMeme template {template['name']} (sim {template['similarity']:.3f})")
+                text_variations = generate_meme_texts(template, goal, context)
+                logger.info(f"Generated text variations: {json.dumps(text_variations, indent=2)}")
                 
-                # Generate text variations for this template
-                text_variations = generate_meme_texts(template, goal, TEST_CONTEXT)
-                for i, choice in enumerate(text_variations["text_choices"], 1):
-                    if choice["box_count"] == 1:
-                        print(f"\t\tText Choice {i}: {choice['text1']}")
-                    else:
-                        print(f"\t\tText Choice {i}: {choice['text1']} | {choice['text2']}")
+                if "text_choices" not in text_variations:
+                    logger.error(f"No text_choices in variations: {text_variations}")
+                    continue
+                    
+                for choice in text_variations["text_choices"]:
+                    # Convert text choice to array format
+                    text_boxes = [None] * 7  # Initialize with 7 None values
+                    for i in range(1, 8):
+                        if f"text{i}" in choice:
+                            text_boxes[i-1] = choice[f"text{i}"]
+                    
+                    try:
+                        if "id" not in template:
+                            logger.error(f"Template missing id field: {template}")
+                            continue
+                        generated_memes.append({
+                            "template_id": template["id"],
+                            "text_boxes": text_boxes
+                        })
+                    except Exception as e:
+                        logger.error(f"Error processing template: {template}")
+                        logger.error(f"Error details: {str(e)}")
+                        continue
+        
+        # Check if we have any generated memes
+        if not generated_memes:
+            logger.error("No memes were generated. Templates or text generation may have failed.")
+            raise ValueError("No memes were generated")
+
+        # Match UUIDs with generated memes
+        uuid_memes = []
+        for i, uuid in enumerate(uuids):
+            # Use modulo to cycle through generated memes if we have more UUIDs than memes
+            meme = generated_memes[i % len(generated_memes)]
+            logger.info(f"Matching UUID {uuid} with template_id {meme['template_id']}")
+            uuid_memes.append({
+                "uuid": uuid,
+                "template_id": meme["template_id"],
+                "text_boxes": meme["text_boxes"]
+            })
             
+        # Update database with generated memes
+        with conn.cursor() as cur:
+            for meme in uuid_memes:
+                cur.execute("""
+                    UPDATE memes
+                    SET 
+                        template_id = %s,
+                        text_box_1 = %s,
+                        text_box_2 = %s,
+                        text_box_3 = %s,
+                        text_box_4 = %s,
+                        text_box_5 = %s,
+                        text_box_6 = %s,
+                        text_box_7 = %s
+                    WHERE id = CAST(%s AS UUID)
+                """, (
+                    meme["template_id"],
+                    meme["text_boxes"][0],
+                    meme["text_boxes"][1],
+                    meme["text_boxes"][2],
+                    meme["text_boxes"][3],
+                    meme["text_boxes"][4],
+                    meme["text_boxes"][5],
+                    meme["text_boxes"][6],
+                    meme["uuid"]
+                ))
+            conn.commit()
+            
+        conn.close()
+        
+        # Return results in specified format
+        return [{
+            "uuid": meme["uuid"],
+            "text_boxes": meme["text_boxes"]
+        } for meme in uuid_memes]
+        
+    except Exception as e:
+        logger.error(f"Failed to generate memes for UUIDs: {str(e)}")
+        raise
+
+if __name__ == "__main__":
+    # Test the batch generation
+    TEST_CONTEXT = "Insecure people criticize when youre doing things that they dont"
+    TEST_UUIDS = ["test-uuid-1", "test-uuid-2"]  # Replace with real UUIDs for testing
+    try:
+        results = generate_memes_for_uuids(TEST_CONTEXT, TEST_UUIDS)
+        print("\nGenerated Memes:")
+        print(json.dumps(results, indent=2))
     except Exception as e:
         logger.error(f"Failed to process: {str(e)}")
