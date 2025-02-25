@@ -22,9 +22,15 @@ CREATE INDEX meme_templates_embedding_idx ON meme_templates USING ivfflat (embed
 -- Create users table
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    username VARCHAR(255) NOT NULL UNIQUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    username TEXT NOT NULL UNIQUE,
+    npub TEXT NULL UNIQUE,
+    nsec TEXT NULL UNIQUE,
+    address TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE INDEX idx_users_address ON users(address);
 
 -- Create memes table with vector support
 CREATE TABLE memes (
