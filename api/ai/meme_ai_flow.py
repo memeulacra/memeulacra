@@ -7,6 +7,7 @@ from psycopg2.extras import RealDictCursor
 from pgvector.psycopg2 import register_vector
 import numpy as np
 import torch
+from text_overlay import TextOverlay
 from transformers import AutoTokenizer, AutoModel
 from dotenv import load_dotenv
 from prompts import (
@@ -289,6 +290,37 @@ def get_template_meme_examples(template_id: int) -> dict:
         logger.error(f"Error getting template meme examples: {str(e)}")
         raise
 
+def create_meme_image(template: dict, text_choice: dict, output_path: str) -> str:
+    """Create a meme image by overlaying text on the template.
+    
+    Args:
+        template: Dict containing template info including image_url
+        text_choice: Dict containing text choices (text1, text2, etc.)
+        output_path: Path where to save the output image
+        
+    Returns:
+        Path to the generated meme image
+    """
+    try:
+        # Initialize text overlay with template URL
+        overlay = TextOverlay(template['image_url'])
+        
+        # Add text based on box count
+        if text_choice["box_count"] == 1:
+            # Center both pieces of text if only one box
+            overlay.add_meme_text(text_choice["text1"], "")
+        else:
+            # Use top and bottom text for 2+ boxes
+            overlay.add_meme_text(text_choice["text1"], text_choice["text2"])
+        
+        # Save the result
+        overlay.save(output_path)
+        return output_path
+        
+    except Exception as e:
+        logger.error(f"Error creating meme image: {str(e)}")
+        raise
+
 if __name__ == "__main__":
     TEST_CONTEXT = "Insecure people criticize when youre doing things that they dont"
     try:
@@ -313,6 +345,14 @@ if __name__ == "__main__":
                         print(f"\t\tText Choice {i}: {choice['text1']}")
                     else:
                         print(f"\t\tText Choice {i}: {choice['text1']} | {choice['text2']}")
+                    
+                    # Create a meme image for this text choice
+                    output_path = f"tests/meme_output_{template['name']}_{i}.jpg"
+                    try:
+                        created_meme = create_meme_image(template, choice, output_path)
+                        print(f"\t\tMeme created at: {created_meme}")
+                    except Exception as e:
+                        logger.error(f"\t\tFailed to create meme: {str(e)}")
             
     except Exception as e:
         logger.error(f"Failed to process: {str(e)}")
