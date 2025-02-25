@@ -33,6 +33,8 @@ services:
       POSTGRES_USER: memeuser
       POSTGRES_PASSWORD: memepass
       POSTGRES_HOST: db
+    env_file:
+      - ./.env
     depends_on:
       - db
 
