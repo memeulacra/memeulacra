@@ -1,12 +1,6 @@
-version: '3.8'
-
-x-common: &common
-  environment:
-    COMPOSE_HTTP_TIMEOUT: 300
-
 services:
   db:
-    build: 
+    build:
       context: ./postgres
       dockerfile: Dockerfile
     environment:
@@ -38,9 +32,22 @@ services:
     depends_on:
       - db
 
-# frontend container
-
-
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      POSTGRES_DB: memedb
+      POSTGRES_USER: memeuser
+      POSTGRES_PASSWORD: memepass
+      NEXT_PUBLIC_ONCHAINKIT_API_KEY: 6IXH4m79EVAdWozcD7k0jznfCXVyQCZl
+      NODE_ENV: production
+      DEBUG: true
+      PORT: 3005
+    depends_on:
+      - db
 
 volumes:
   postgres_data:

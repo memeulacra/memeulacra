@@ -6,8 +6,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  ConnectWallet,
+  Wallet,
+  WalletDropdown,
+  WalletDropdownLink,
+  WalletDropdownDisconnect,
+} from '@coinbase/onchainkit/wallet'
+import {
+  Address,
+  Avatar,
+  Name,
+  Identity,
+  EthBalance,
+  useAddress,
+} from '@coinbase/onchainkit/identity'
 
 export default function ProfilePage() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [profile, setProfile] = useState({
     email: 'user@example.com',
     npub: 'npub1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
@@ -18,6 +34,11 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   // Flag to signal the component has mounted (client-only)
   const [isMounted, setIsMounted] = useState(false)
+  const { data: address, isLoading } = useAddress({ name: 'zizzamia.base.eth' })
+  
+  useEffect(() => {
+    console.log('address:', address)
+  }, [address])
 
   useEffect(() => {
     setIsMounted(true)
@@ -48,6 +69,23 @@ export default function ProfilePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="space-y-4 flex justify-center">
+                <Wallet>
+                  <ConnectWallet>
+                    <Avatar className="h-6 w-6" />
+                    <Name />
+                  </ConnectWallet>
+                  <WalletDropdown>
+                    <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
+                      <Avatar />
+                      <Name />
+                      <Address />
+                      <EthBalance />
+                    </Identity>
+                    <WalletDropdownDisconnect />
+                  </WalletDropdown>
+                </Wallet>
+              </div>
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="email">Email</Label>
