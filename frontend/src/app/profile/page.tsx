@@ -19,8 +19,8 @@ import {
   Name,
   Identity,
   EthBalance,
-  useAddress,
 } from '@coinbase/onchainkit/identity'
+import { useAccount } from 'wagmi'
 
 export default function ProfilePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -34,11 +34,11 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   // Flag to signal the component has mounted (client-only)
   const [isMounted, setIsMounted] = useState(false)
-  const { data: address, isLoading } = useAddress({ name: 'zizzamia.base.eth' })
+  const { address, isConnected, isConnecting, isDisconnected } = useAccount()
   
   useEffect(() => {
-    console.log('address:', address)
-  }, [address])
+    console.log('address:', address, 'isConnected:', isConnected, 'isConnecting:', isConnecting, 'isDisconnected:', isDisconnected)
+  }, [address, isConnected, isConnecting, isDisconnected])
 
   useEffect(() => {
     setIsMounted(true)

@@ -17,6 +17,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.4.7",
+    "jose": "^6.0.6",
     "loglevel": "^1.9.2",
     "lucide-react": "^0.475.0",
     "next": "15.1.7",
