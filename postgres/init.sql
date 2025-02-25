@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create meme_templates table
 CREATE TABLE meme_templates (
-    id SERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL UNIQUE,
     description TEXT,
     image_url TEXT NOT NULL,
@@ -34,9 +34,9 @@ CREATE INDEX idx_users_address ON users(address);
 
 -- Create memes table with vector support
 CREATE TABLE memes (
-    id SERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     context TEXT NOT NULL,
-    template_id INTEGER NOT NULL REFERENCES meme_templates(id),
+    template_id UUID NOT NULL REFERENCES meme_templates(id),
     text_box_1 TEXT,
     text_box_2 TEXT,
     text_box_3 TEXT,
@@ -45,7 +45,7 @@ CREATE TABLE memes (
     text_box_6 TEXT,
     text_box_7 TEXT,
     meme_cdn_url TEXT NOT NULL,
-    user_id INTEGER REFERENCES users(id),
+    user_id UUID REFERENCES users(id),
     embedding VECTOR(1536), -- Using 1536 dimensions (OpenAI's text-embedding-ada-002 size)
     thumbs_up INTEGER NOT NULL DEFAULT 0,
     thumbs_down INTEGER NOT NULL DEFAULT 0,
@@ -54,9 +54,9 @@ CREATE TABLE memes (
 
 -- Create user interactions table
 CREATE TABLE user_interactions (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id),
-    meme_id INTEGER NOT NULL REFERENCES memes(id),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    meme_id UUID NOT NULL REFERENCES memes(id),
     interaction_type VARCHAR(50) NOT NULL, -- e.g., 'like', 'share', 'comment'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
