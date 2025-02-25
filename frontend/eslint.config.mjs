@@ -22,8 +22,7 @@ export default [{
     '**/build/',
     '**/storybook-static/',
     '**/public/',
-    '**/.next/',
-    '**/*.config.js',
+    '**/.next/'
   ],
 }, ...compat.extends(
   'eslint:recommended',
