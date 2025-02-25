@@ -10,3 +10,4 @@ torch
 transformers
 pgvector
 hf_transfer
+gunicorn
