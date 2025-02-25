@@ -3,3 +3,5 @@ npm-debug.log
 .git
 .gitignore
 .env
+.env.production
+.env.local

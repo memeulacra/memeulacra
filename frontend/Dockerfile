@@ -1,4 +1,4 @@
-FROM node:22-bullseye-slim AS builder
+FROM node:22-bullseye AS builder
 WORKDIR /app
 COPY package.json ./
 COPY package-lock.json ./
@@ -17,4 +17,5 @@ EXPOSE 3005
 ENV NEXT_PUBLIC_BUILD_ID=1
 ENV PORT=3005
 ENV NODE_ENV=production
+ENV ENV=production
 CMD ["npm", "run", "start"]
