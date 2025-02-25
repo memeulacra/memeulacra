@@ -4,6 +4,7 @@ from typing import List, Optional
 import os
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from ai.meme_ai_flow import generate_memes_for_uuids
 
 load_dotenv()
 
@@ -17,6 +18,10 @@ class MemeRequest(BaseModel):
     template_id: int
     text_boxes: List[str]
     context: str
+
+class BatchMemeRequest(BaseModel):
+    context: str
+    uuids: List[str]
 
 class MemeTemplate(BaseModel):
     id: int
@@ -129,6 +134,19 @@ async def generate_meme(request: MemeRequest):
     except HTTPException as he:
         raise he
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate-meme-batch")
+async def generate_meme_batch(request: BatchMemeRequest):
+    try:
+        # Call the meme generation function
+        results = generate_memes_for_uuids(request.context, request.uuids)
+        return {"memes": results}
+    except ValueError as ve:
+        # Handle validation errors (like missing UUIDs)
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        # Handle other errors
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
