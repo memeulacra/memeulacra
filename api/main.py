@@ -2,17 +2,27 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import logging
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 from ai.meme_ai_flow import generate_memes_for_uuids
 
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Memeulacra API")
 
 # Database connection
 DATABASE_URL = f"postgresql://{os.getenv('POSTGRES_USER', 'memeuser')}:{os.getenv('POSTGRES_PASSWORD', 'memepass')}@db:5432/{os.getenv('POSTGRES_DB', 'memedb')}"
 engine = create_engine(DATABASE_URL)
+
+# Create a thread pool executor for running CPU-bound tasks
+thread_pool = ThreadPoolExecutor(max_workers=4)
 
 class MemeRequest(BaseModel):
     template_id: int
@@ -32,6 +42,10 @@ class MemeTemplate(BaseModel):
     example_texts: List[str]
     tags: List[str]
     popularity_score: float
+
+# This function wraps our CPU-bound operations for the thread pool
+def run_in_threadpool(func, *args, **kwargs):
+    return func(*args, **kwargs)
 
 @app.get("/")
 async def root():
@@ -139,14 +153,29 @@ async def generate_meme(request: MemeRequest):
 @app.post("/generate-meme-batch")
 async def generate_meme_batch(request: BatchMemeRequest):
     try:
-        # Call the meme generation function
-        results = generate_memes_for_uuids(request.context, request.uuids)
+        # Log the start of the operation
+        logger.info(f"Starting batch meme generation for {len(request.uuids)} memes")
+        
+        # Run the CPU-bound AI task in a separate thread to keep FastAPI's event loop responsive
+        # This allows multiple requests to be processed concurrently
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(
+            thread_pool,
+            run_in_threadpool,
+            generate_memes_for_uuids,
+            request.context,
+            request.uuids
+        )
+        
+        logger.info(f"Completed batch meme generation for {len(request.uuids)} memes")
         return {"memes": results}
     except ValueError as ve:
         # Handle validation errors (like missing UUIDs)
+        logger.error(f"Validation error: {str(ve)}")
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         # Handle other errors
+        logger.exception("Error in batch meme generation")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
@@ -158,3 +187,4 @@ async def health_check():
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+    
