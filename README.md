@@ -17,7 +17,7 @@ Create the database and api containers:
 docker compose up --build
 ```
 
-Then run the setup scripts in this order
+Then run the setup script to put some demo users and imgflip meme instances into the db:
 
 ```commandline
 cd setup
@@ -25,6 +25,24 @@ cd setup
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python process_memes.py
 python populate_meme_instances.py
 ```
+
+After that's done, we can test that the api is working:
+
+```commandline
+cd .. # back to project root
+cd tests
+python3 -m venv venv
+
+# optional, do this if you're still in the setup/ venv
+deactivate
+
+source venv/bin/activate
+pip install -r requirements.txt
+python test_batch_meme_generation.py
+
+# wait, this could take 1-2 minutes
+```
+
+Then you should see new memes created in the db, and the output in the terminal should show resulting meme template ids and text boxes

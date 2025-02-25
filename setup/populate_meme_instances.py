@@ -25,9 +25,11 @@ async def create_demo_users(pool: asyncpg.Pool) -> List[str]:
     async with pool.acquire() as conn:
         for i in range(1, 11):
             username = f"Demo User {i}"
+            fake_address = f"0x{'9' * 38}{i:02d}"  # Creates addresses like 0x999999999999999999999999999999999999901
             user_id = await conn.fetchval(
-                'INSERT INTO users (username) VALUES ($1) ON CONFLICT (username) DO UPDATE SET username = $1 RETURNING id::text',
-                username
+                'INSERT INTO users (username, address) VALUES ($1, $2) ON CONFLICT (username) DO UPDATE SET username = $1 RETURNING id::text',
+                username,
+                fake_address
             )
             user_ids.append(user_id)
     logger.info(f"Created/verified {len(user_ids)} demo users")

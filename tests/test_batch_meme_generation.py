@@ -119,7 +119,7 @@ def call_batch_generation_api(uuids: List[str]):
             f"{API_BASE_URL}/generate-meme-batch",
             json=payload,
             headers={"Content-Type": "application/json"},
-            timeout=30
+            timeout=180
         )
         response.raise_for_status()
         
