@@ -9,6 +9,9 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
+# Configuration
+NUM_MEMES_TO_GENERATE = 4  # Number of memes to generate in the test
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -77,11 +80,11 @@ def create_placeholder_memes() -> List[str]:
                             (SELECT id FROM meme_templates LIMIT 1),
                             'https://placeholder-url.com/meme.jpg',
                             (SELECT id FROM users LIMIT 1)
-                        FROM generate_series(1,10)
+                        FROM generate_series(1, %s)
                         RETURNING id
                     )
                     SELECT json_agg(id::text) FROM inserted_memes;
-                """)
+                """, (NUM_MEMES_TO_GENERATE,))
                 
                 uuids = cur.fetchone()['json_agg']
                 if not uuids:
