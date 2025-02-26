@@ -1,65 +1,87 @@
-import { randomBytes } from 'crypto'
+import crypto from 'crypto'
 
-// In-memory store for nonces with expiration
-// In production, you might want to use Redis or another distributed cache
-const nonceStore = new Map<string, { value: string, expires: number }>()
+// In-memory store for nonces (replace with Redis or another cache in production)
+const nonceStore: Record<string, { nonce: string; expires: number }> = {}
 
-// Cleanup expired nonces periodically
-setInterval(() => {
-  const now = Date.now()
-  for (const [address, data] of nonceStore.entries()) {
-    if (data.expires < now) {
-      nonceStore.delete(address)
-    }
-  }
-}, 60000) // Clean up every minute
+// Cleanup interval (5 minutes)
+const CLEANUP_INTERVAL = 5 * 60 * 1000
+
+// Nonce expiration time (5 minutes)
+const NONCE_EXPIRATION = 5 * 60 * 1000
 
 /**
- * Generates a new nonce for an address
- * 
- * @param address Ethereum address to generate nonce for
+ * Generate a secure nonce for wallet authentication
+ * @param address The wallet address to generate a nonce for
  * @returns The generated nonce
  */
 export function generateNonce(address: string): string {
-  // Generate a random nonce
-  const nonce = randomBytes(32).toString('hex')
-  
-  // Store the nonce with 5-minute expiration
-  nonceStore.set(address.toLowerCase(), {
-    value: nonce,
-    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
-  })
-  
+  // Clean up the address to ensure consistent format
+  const normalizedAddress = address.toLowerCase()
+
+  // Generate a secure random nonce
+  const nonce = crypto.randomBytes(32).toString('hex')
+
+  // Store the nonce with expiration
+  nonceStore[normalizedAddress] = {
+    nonce,
+    expires: Date.now() + NONCE_EXPIRATION
+  }
+
+  // Set up cleanup if not already done
+  setupCleanup()
+
   return nonce
 }
 
 /**
- * Validates a nonce for an address and removes it if valid
- * 
- * @param address Ethereum address to validate nonce for
- * @param nonce Nonce to validate
- * @returns boolean indicating if the nonce is valid
+ * Validate a nonce for a given address
+ * @param address The wallet address
+ * @param nonce The nonce to validate
+ * @returns Whether the nonce is valid
  */
 export function validateNonce(address: string, nonce: string): boolean {
-  const key = address.toLowerCase()
-  const storedData = nonceStore.get(key)
-  
-  // Check if we have a nonce for this address
-  if (!storedData) return false
-  
-  // Check if the nonce has expired
-  if (storedData.expires < Date.now()) {
-    nonceStore.delete(key)
+  const normalizedAddress = address.toLowerCase()
+
+  // Get the stored nonce data
+  const nonceData = nonceStore[normalizedAddress]
+
+  // If no nonce exists or it has expired, return false
+  if (!nonceData || nonceData.expires < Date.now()) {
     return false
   }
-  
+
   // Check if the nonce matches
-  const isValid = storedData.value === nonce
-  
-  // Remove the nonce to prevent replay attacks
-  if (isValid) {
-    nonceStore.delete(key)
+  const valid = nonceData.nonce === nonce
+
+  // If valid, invalidate the nonce to prevent replay attacks
+  if (valid) {
+    delete nonceStore[normalizedAddress]
   }
-  
-  return isValid
+
+  return valid
+}
+
+// Set up cleanup of expired nonces
+let cleanupInterval: NodeJS.Timeout | null = null
+
+function setupCleanup() {
+  if (cleanupInterval) return
+
+  cleanupInterval = setInterval(() => {
+    const now = Date.now()
+
+    // Clean up expired nonces
+    for (const address in nonceStore) {
+      if (nonceStore[address].expires < now) {
+        delete nonceStore[address]
+      }
+    }
+  }, CLEANUP_INTERVAL)
+
+  // Ensure the interval is cleared when the server shuts down
+  if (typeof process !== 'undefined') {
+    process.on('exit', () => {
+      if (cleanupInterval) clearInterval(cleanupInterval)
+    })
+  }
 }

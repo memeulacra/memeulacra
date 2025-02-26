@@ -69,3 +69,46 @@ CREATE INDEX ON user_interactions(meme_id);
 
 -- Create vector similarity search index for meme templates
 CREATE INDEX ON meme_templates USING ivfflat (embedding vector_cosine_ops);
+
+
+-- Create sessions table - uses UUID for consistency with your schema
+CREATE TABLE IF NOT EXISTS sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  wallet_address TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  CONSTRAINT fk_wallet_address
+    FOREIGN KEY (wallet_address)
+    REFERENCES users(address)
+    ON DELETE CASCADE
+);
+
+-- Add indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_sessions_wallet_address
+  ON sessions(wallet_address);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
+  ON sessions(expires_at);
+
+-- Create or update function to manage timestamps
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for users table if it doesn't already exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'update_users_updated_at'
+  ) THEN
+    CREATE TRIGGER update_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_column();
+  END IF;
+END
+$$;

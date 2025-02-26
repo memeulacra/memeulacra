@@ -1,35 +1,29 @@
-import { isAddress, recoverMessageAddress } from 'ethers'
+// File path: /lib/auth/signature.ts
+import { ethers } from 'ethers'
 
 /**
- * Verifies a signature against an Ethereum address and nonce
- * 
- * @param address The Ethereum address that supposedly signed the message
+ * Verify an Ethereum signature against a wallet address and message
+ * @param address The wallet address that supposedly signed the message
  * @param signature The signature to verify
  * @param nonce The nonce that was signed
- * @returns boolean indicating if the signature is valid
+ * @returns Whether the signature is valid
  */
 export async function verifySignature(
-  address: string, 
-  signature: string, 
+  address: string,
+  signature: string,
   nonce: string
 ): Promise<boolean> {
   try {
-    // Validate the address format
-    if (!isAddress(address)) {
-      console.error('Invalid address format')
-      return false
-    }
-    
-    // Create the same message that was signed by the wallet
-    const message = `Sign this message to authenticate with our application.\n\nNonce: ${nonce}`
-    
-    // Recover the address from the signature
-    const recoveredAddress = await recoverMessageAddress(message, signature)
-    
-    // Compare the recovered address with the claimed address (case-insensitive)
-    return recoveredAddress.toLowerCase() === address.toLowerCase()
+    // Format the message that was signed
+    const message = `Sign this message to authenticate with Memeulacra.\n\nNonce: ${nonce}`
+
+    // Recover the signer address from the signature
+    const signerAddress = ethers.verifyMessage(message, signature)
+
+    // Compare addresses (case-insensitive)
+    return signerAddress.toLowerCase() === address.toLowerCase()
   } catch (error) {
-    console.error('Signature verification failed:', error)
+    console.error('Signature verification error:', error)
     return false
   }
 }
