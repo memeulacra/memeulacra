@@ -1,9 +1,24 @@
 from PIL import Image, ImageDraw, ImageFont
 import os
 import requests
+import logging
 from io import BytesIO
+from dotenv import load_dotenv
 
-CDN_BASE_URL = "https://memulacra.nyc3.digitaloceanspaces.com"
+# Load environment variables from .env file
+load_dotenv()
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Get CDN base URL from environment variable with fallback
+# Use the bucket name to construct the CDN base URL
+bucket_name = os.getenv('DO_SPACES_BUCKET', 'memulacra')
+CDN_BASE_URL = f"https://{bucket_name}.nyc3.digitaloceanspaces.com"
+
+# Log the CDN base URL override
+env_cdn_url = os.getenv('CDN_BASE_URL', 'https://memes.supertech.ai')
+logger.info(f"TextOverlay: Overriding CDN base URL from {env_cdn_url} to {CDN_BASE_URL}")
 
 class TextOverlay:
     def __init__(self, image_url: str):
