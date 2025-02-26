@@ -13,6 +13,7 @@ interface Box {
   y: number
   width: number
   height: number
+  label?: string // Label for the text box
 }
 
 interface MemeTemplate {
@@ -148,6 +149,7 @@ export default function MemeEditor() {
       y: 10,
       width: 20,
       height: 10,
+      label: "", // Initialize with empty label
     }
     log(`Adding new box with id ${newBox.id}`)
     setBoxes([...boxes, newBox])
@@ -412,6 +414,27 @@ export default function MemeEditor() {
           ))}
         </div>
       )}
+      {/* Text Box Labels Section */}
+      {imageLoaded && boxes.length > 0 && (
+        <div className="mt-4 mb-4 border border-gray-200 rounded-md p-4">
+          <h3 className="text-lg font-semibold mb-2">Text Box Labels</h3>
+          <div className="space-y-2">
+            {boxes.map((box) => (
+              <div key={`label-${box.id}`} className="flex items-center">
+                <span className="mr-2 font-medium">Text Box {box.id}:</span>
+                <input
+                  type="text"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder={`Enter label for text box ${box.id}`}
+                  value={box.label || ''}
+                  onChange={(e) => updateBox(box.id, { label: e.target.value })}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between">
         <Button onClick={addBox} disabled={isLoading}>
           <Plus className="mr-2 h-4 w-4" /> Add Box
