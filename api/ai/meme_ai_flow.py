@@ -10,8 +10,11 @@ from pgvector.psycopg2 import register_vector
 import numpy as np
 import torch
 from ai.text_overlay import TextOverlay
+from ai.s3_uploader import S3Uploader
 from transformers import AutoTokenizer, AutoModel
 from dotenv import load_dotenv
+import anthropic
+from ai.rate_limiter import RateLimiter
 from ai.prompts import (
     GOAL_GEN_SYSTEM_PROMPT, 
     format_goal_gen_user_prompt,
@@ -29,37 +32,27 @@ logger = logging.getLogger(__name__)
 # Load environment variables from .env file
 load_dotenv()
 
-def generate_meme_goals(context: str):
-    """Generate meme goals for the given context using Venice API"""
-    VENICE_API_KEY = os.getenv("VENICE_API_TOKEN")
-    if not VENICE_API_KEY:
-        raise ValueError("VENICE_API_TOKEN environment variable is not set")
+async def generate_meme_goals(context: str):
+    """Generate meme goals for the given context using Claude API"""
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    if not ANTHROPIC_API_KEY:
+        raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
 
-    URL = "https://api.venice.ai/api/v1/chat/completions"
+    # Initialize Anthropic client
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY, base_url=None)
     
-    payload = {
-        "model": "llama-3.3-70b",
-        "messages": [
-            {"role": "system", "content": GOAL_GEN_SYSTEM_PROMPT},
-            {"role": "user", "content": format_goal_gen_user_prompt(context)}
-        ],
-        "venice_parameters": {
-            "enable_web_search": 'on',
-            "include_venice_system_prompt": False,
-        },
-        "temperature": 0.7,
-        "max_tokens": 700
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {VENICE_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
     try:
-        response = requests.post(URL, json=payload, headers=headers)
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        # Use the RateLimiter to make the request
+        response = await RateLimiter.make_anthropic_request(
+            logger=logger,
+            client=client,
+            system_prompt=GOAL_GEN_SYSTEM_PROMPT,
+            user_prompt=format_goal_gen_user_prompt(context),
+            max_tokens=700,
+            temperature=0.7
+        )
+        
+        content = response.content[0].text
         
         # Try to parse the JSON directly first
         try:
@@ -69,7 +62,7 @@ def generate_meme_goals(context: str):
             # If parsing fails, use JsonRepairer
             logger.info("Initial JSON parsing failed, attempting repair...")
             repairer = JsonRepairer({"meme_goals": []})  # Simple schema
-            fixed_json = repairer.repair_json(content)
+            fixed_json = await repairer.repair_json(content)
             return json.loads(fixed_json)
             
     except Exception as e:
@@ -111,11 +104,11 @@ def get_embedding(text: str) -> list:
     # Convert to numpy array for pgvector
     return np.array(embeddings[0].tolist())
 
-def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
+async def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
     """Generate text variations for a meme template based on the goal and examples"""
-    VENICE_API_KEY = os.getenv("VENICE_API_TOKEN")
-    if not VENICE_API_KEY:
-        raise ValueError("VENICE_API_TOKEN environment variable is not set")
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    if not ANTHROPIC_API_KEY:
+        raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
 
     # Get example memes for this template if available
     examples = None
@@ -146,31 +139,21 @@ def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
         logger.warning(f"Failed to get meme examples: {str(e)}")
         # Continue without examples if there's an error
 
-    URL = "https://api.venice.ai/api/v1/chat/completions"
+    # Initialize Anthropic client
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY, base_url=None)
     
-    payload = {
-        "model": "llama-3.3-70b",
-        "messages": [
-            {"role": "system", "content": GENERATE_MEME_TEXT_SYSTEM_PROMPT},
-            {"role": "user", "content": format_generate_meme_text_user_prompt(template, goal, context, examples)}
-        ],
-        "venice_parameters": {
-            "enable_web_search": 'on',
-            "include_venice_system_prompt": False,
-        },
-        "temperature": 0.8,
-        "max_tokens": 700
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {VENICE_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
     try:
-        response = requests.post(URL, json=payload, headers=headers)
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        # Use the RateLimiter to make the request
+        response = await RateLimiter.make_anthropic_request(
+            logger=logger,
+            client=client,
+            system_prompt=GENERATE_MEME_TEXT_SYSTEM_PROMPT,
+            user_prompt=format_generate_meme_text_user_prompt(template, goal, context, examples),
+            max_tokens=700,
+            temperature=0.8
+        )
+        
+        content = response.content[0].text
         
         # Try to parse the JSON directly first
         try:
@@ -180,7 +163,7 @@ def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
             # If parsing fails, use JsonRepairer
             logger.info("Initial JSON parsing failed, attempting repair...")
             repairer = JsonRepairer({"text_choices": []})
-            fixed_json = repairer.repair_json(content)
+            fixed_json = await repairer.repair_json(content)
             return json.loads(fixed_json)
             
     except Exception as e:
@@ -300,10 +283,13 @@ def get_template_meme_examples(template_id: int) -> dict:
         logger.error(f"Error getting template meme examples: {str(e)}")
         raise
 
-def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
+# Initialize S3 uploader
+s3_uploader = S3Uploader()
+
+async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
     """
     Generate memes for a list of UUIDs using the given context.
-    Returns a list of dicts containing UUID and text boxes.
+    Returns a list of dicts containing UUID, text boxes, and CDN URL.
     """
 
     try:
@@ -328,7 +314,7 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
                 raise ValueError(f"UUIDs not found in database: {missing}")
 
         # Generate meme goals
-        goals = generate_meme_goals(context)
+        goals = await generate_meme_goals(context)
         logger.info(f"Generated meme goals: {json.dumps(goals, indent=2)}")
         
         if "meme_goals" not in goals:
@@ -342,7 +328,7 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
             logger.info(f"Found similar templates for goal '{goal.get('goal', '')}': {json.dumps(templates, indent=2)}")
             
             for template in templates:
-                text_variations = generate_meme_texts(template, goal, context)
+                text_variations = await generate_meme_texts(template, goal, context)
                 logger.info(f"Generated text variations: {json.dumps(text_variations, indent=2)}")
                 
                 if "text_choices" not in text_variations:
@@ -385,33 +371,99 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
                 "template_id": meme["template_id"],
                 "text_boxes": meme["text_boxes"]
             })
+        
+        # Get template image URLs and create meme images
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            for meme in uuid_memes:
+                # Get template image URL
+                cur.execute("""
+                    SELECT image_url 
+                    FROM meme_templates 
+                    WHERE id = %s
+                """, (meme["template_id"],))
+                template = cur.fetchone()
+                
+                if not template:
+                    logger.error(f"Template {meme['template_id']} not found")
+                    continue
+                
+                # Create text overlay
+                try:
+                    # Initialize text overlay with template image
+                    overlay = TextOverlay(template["image_url"])
+                    
+                    # Add text to the image
+                    # For simplicity, we'll use the first two text boxes as top and bottom text
+                    top_text = meme["text_boxes"][0] or ""
+                    bottom_text = meme["text_boxes"][1] or ""
+                    overlay.add_meme_text(top_text, bottom_text)
+                    
+                    # Upload to Digital Ocean Spaces using the UUID as filename
+                    cdn_url = s3_uploader.upload_image(overlay.get_image(), meme["uuid"])
+                    
+                    # Update meme with CDN URL
+                    meme["cdn_url"] = cdn_url
+                    logger.info(f"Created meme image and uploaded to {cdn_url}")
+                    
+                except Exception as e:
+                    logger.error(f"Error creating meme image: {str(e)}")
+                    meme["cdn_url"] = None
             
-        # Update database with generated memes
+        # Update database with generated memes and CDN URLs
         with conn.cursor() as cur:
             for meme in uuid_memes:
-                cur.execute("""
-                    UPDATE memes
-                    SET 
-                        template_id = %s,
-                        text_box_1 = %s,
-                        text_box_2 = %s,
-                        text_box_3 = %s,
-                        text_box_4 = %s,
-                        text_box_5 = %s,
-                        text_box_6 = %s,
-                        text_box_7 = %s
-                    WHERE id = CAST(%s AS UUID)
-                """, (
-                    meme["template_id"],
-                    meme["text_boxes"][0],
-                    meme["text_boxes"][1],
-                    meme["text_boxes"][2],
-                    meme["text_boxes"][3],
-                    meme["text_boxes"][4],
-                    meme["text_boxes"][5],
-                    meme["text_boxes"][6],
-                    meme["uuid"]
-                ))
+                # Only update if we have a CDN URL (to avoid not-null constraint violation)
+                if meme.get("cdn_url"):
+                    cur.execute("""
+                        UPDATE memes
+                        SET 
+                            template_id = %s,
+                            text_box_1 = %s,
+                            text_box_2 = %s,
+                            text_box_3 = %s,
+                            text_box_4 = %s,
+                            text_box_5 = %s,
+                            text_box_6 = %s,
+                            text_box_7 = %s,
+                            meme_cdn_url = %s
+                        WHERE id = CAST(%s AS UUID)
+                    """, (
+                        meme["template_id"],
+                        meme["text_boxes"][0],
+                        meme["text_boxes"][1],
+                        meme["text_boxes"][2],
+                        meme["text_boxes"][3],
+                        meme["text_boxes"][4],
+                        meme["text_boxes"][5],
+                        meme["text_boxes"][6],
+                        meme["cdn_url"],
+                        meme["uuid"]
+                    ))
+                else:
+                    # If we don't have a CDN URL, just update the text boxes and template
+                    cur.execute("""
+                        UPDATE memes
+                        SET 
+                            template_id = %s,
+                            text_box_1 = %s,
+                            text_box_2 = %s,
+                            text_box_3 = %s,
+                            text_box_4 = %s,
+                            text_box_5 = %s,
+                            text_box_6 = %s,
+                            text_box_7 = %s
+                        WHERE id = CAST(%s AS UUID)
+                    """, (
+                        meme["template_id"],
+                        meme["text_boxes"][0],
+                        meme["text_boxes"][1],
+                        meme["text_boxes"][2],
+                        meme["text_boxes"][3],
+                        meme["text_boxes"][4],
+                        meme["text_boxes"][5],
+                        meme["text_boxes"][6],
+                        meme["uuid"]
+                    ))
             conn.commit()
             
         conn.close()
@@ -419,7 +471,8 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
         # Return results in specified format
         return [{
             "uuid": meme["uuid"],
-            "text_boxes": meme["text_boxes"]
+            "text_boxes": meme["text_boxes"],
+            "cdn_url": meme.get("cdn_url")
         } for meme in uuid_memes]
         
     except Exception as e:
@@ -427,12 +480,19 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
         raise
 
 if __name__ == "__main__":
+    import asyncio
+    
     # Test the batch generation
     TEST_CONTEXT = "Insecure people criticize when youre doing things that they dont"
     TEST_UUIDS = ["test-uuid-1", "test-uuid-2"]  # Replace with real UUIDs for testing
-    try:
-        results = generate_memes_for_uuids(TEST_CONTEXT, TEST_UUIDS)
-        print("\nGenerated Memes:")
-        print(json.dumps(results, indent=2))
-    except Exception as e:
-        logger.error(f"Failed to process: {str(e)}")
+    
+    async def main():
+        try:
+            results = await generate_memes_for_uuids(TEST_CONTEXT, TEST_UUIDS)
+            print("\nGenerated Memes:")
+            print(json.dumps(results, indent=2))
+        except Exception as e:
+            logger.error(f"Failed to process: {str(e)}")
+    
+    # Run the async main function
+    asyncio.run(main())
