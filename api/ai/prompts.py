@@ -19,43 +19,43 @@ impact: The desired impact on the conversation
 Do not generate actual meme content or suggestions for specific images. Focus solely on articulating clear goals for what the meme should accomplish."""
 
 
-def format_goal_gen_user_prompt(context: str):
+def format_goal_gen_user_prompt(context: str, num_goals: int = 3):
 
-    return """Analyze the following context and generate 3-5 potential goals for meme creation. Format your response as a JSON array where each object contains the goal, intended emotion, key message, tone level (1-10), and desired impact.
+    return f"""Analyze the following context and generate exactly {num_goals} potential goals for meme creation. Format your response as a JSON array where each object contains the goal, intended emotion, key message, tone level (1-10), and desired impact.
 
     Context: {context}
     Return your response in this exact format, with no additional text:
-    {
+    {{
     "meme_goals": [
-    {
+    {{
     "goal": "Generate a meme that...",
     "emotion": "primary emotion to evoke",
     "message": "key takeaway",
     "tone": number from 1-10,
     "impact": "desired effect on conversation"
-    }
+    }}
     ]
-    }"""
+    }}"""
 
 CHOOSE_MEME_TEMPLATE_SYSTEM_PROMPT = """You are an expert meme curator with deep knowledge of popular meme templates and their emotional resonance. Your role is to select appropriate meme templates that can effectively convey specific messaging goals. For each goal, suggest exactly 3 well-known meme templates that would effectively communicate the intended message, and explain why each template is a good fit for the goal's emotion, message, tone, and intended impact."""
 
 def format_choose_meme_template_choice_user_prompt(goal: dict):
-    return """Given this meme goal:
-        {input_goal_json}
+    return f"""Given this meme goal:
+        {json.dumps(goal, indent=2)}
         Suggest exactly 3 meme templates that would work well for this goal. Return your response in this exact JSON array format, with no additional text:
         [
-        {
+        {{
         "meme_template": "name of the meme template",
         "explanation": "explanation of why this template fits the goal"
-        },
-        {
+        }},
+        {{
         "meme_template": "name of the meme template",
         "explanation": "explanation of why this template fits the goal"
-        },
-        {
+        }},
+        {{
         "meme_template": "name of the meme template",
         "explanation": "explanation of why this template fits the goal"
-        }
+        }}
         ]"""
 
 GENERATE_MEME_TEXT_SYSTEM_PROMPT = """You are an expert meme creator who excels at crafting witty, impactful text for meme templates. Your role is to generate text variations that perfectly match both the meme template's style, the intended goal, and the original context.
@@ -78,7 +78,7 @@ When analyzing examples:
 
 Your outputs must follow the meme's established format while delivering both the goal's message and maintaining relevance to the original context, informed by real engagement data from similar memes."""
 
-def format_generate_meme_text_user_prompt(template: dict, goal: dict, context: str, examples: dict = None):
+def format_generate_meme_text_user_prompt(template: dict, goal: dict, context: str, examples: dict = None, num_variations: int = 3):
     examples_section = ""
     if examples and (examples.get('most_liked') or examples.get('most_disliked')):
         examples_section = "\nLearn from these examples:\n\nHighly Successful Examples:\n"
@@ -97,7 +97,7 @@ Template: {json.dumps(template, indent=2)}
 Goal: {json.dumps(goal, indent=2)}
 Original Context: {context}{examples_section}
 
-Generate exactly 3 text variations for this meme that relate to both the goal and the original context. Use insights from the successful examples while avoiding patterns from less successful ones. Format your response as a JSON object with no additional text:
+Generate exactly {num_variations} text variation(s) for this meme that relate to both the goal and the original context. Use insights from the successful examples while avoiding patterns from less successful ones. Format your response as a JSON object with no additional text:
 
 {{
     "text_choices": [

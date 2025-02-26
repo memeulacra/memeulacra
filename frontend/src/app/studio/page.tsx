@@ -1,29 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
-import { Maximize2, Minimize2 } from 'lucide-react'
+import { Maximize2, Minimize2, Loader } from 'lucide-react'
 import QuickAccessTools from '@/components/quick-access-tools'
 import { Button } from '@/components/ui/button'
 import { ImageModal } from '@/components/image-modal'
+import { useMemeGeneration } from '@/hooks/useMemeGeneration'
 
-  interface ModelSettings {
-    numberOfOutputs: 1 | 2 | 3 | 4
-  }
+interface ModelSettings {
+  numberOfOutputs: 1 | 2 | 3 | 4
+}
 
 export default function ImageStudio() {
-  const [generatedImages, setGeneratedImages] = useState<string[]>([])
   const [isFullSize, setIsFullSize] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const { generateMemes, isGenerating, generatedMemes } = useMemeGeneration()
 
-  const handlePromptSubmit = (prompt: string, modelSettings: ModelSettings) => {
+  const handlePromptSubmit = async (prompt: string, modelSettings: ModelSettings) => {
     console.log('Generating images with:', { prompt, modelSettings })
 
-    // Generate mock image URLs based on the number of outputs
-    const mockImageUrls = Array(modelSettings.numberOfOutputs)
-      .fill(null)
-      .map(() => `https://picsum.photos/800/600?random=${Date.now() + Math.random()}`)
-    setGeneratedImages(mockImageUrls)
+    // Call our API through the hook
+    await generateMemes({
+      context: prompt,
+      numberOfOutputs: modelSettings.numberOfOutputs,
+    })
   }
 
   const toggleFullSize = () => {
@@ -49,27 +50,41 @@ export default function ImageStudio() {
     <div className="flex flex-col h-screen">
       <div className="flex-1 min-h-0 p-4 overflow-hidden">
         <div className="relative h-full bg-gray-800 rounded-lg overflow-hidden">
-          {generatedImages.length > 0 ? (
-            <div className={`grid ${getGridClass(generatedImages.length)} gap-4 p-4 h-full`}>
-              {generatedImages.map((image, index) => (
+          {generatedMemes.length > 0 ? (
+            <div className={`grid ${getGridClass(generatedMemes.length)} gap-4 p-4 h-full`}>
+              {generatedMemes.map((meme, index) => (
                 <div
-                  key={index}
-                  className={`relative ${generatedImages.length === 3 && index === 2 ? 'col-span-2' : ''}`}
-                  onClick={() => setSelectedImage(image)}
+                  key={meme.id}
+                  className={`relative ${generatedMemes.length === 3 && index === 2 ? 'col-span-2' : ''}`}
+                  onClick={() => setSelectedImage(meme.url)}
                 >
-                  <Image
-                    src={image || '/placeholder.svg'}
-                    alt={`Generated Image ${index + 1}`}
-                    layout="fill"
-                    objectFit="cover"
-                    className="rounded-lg"
-                  />
+                  <div className="relative w-full h-full">
+                    <Image
+                      src={meme.url || '/images/meme-placeholder.png'}
+                      alt={`Generated Image ${index + 1}`}
+                      layout="fill"
+                      objectFit="cover"
+                      className="rounded-lg"
+                    />
+                    {isGenerating && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
+                        <Loader className="h-8 w-8 animate-spin text-white" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                No images generated yet
+              {isGenerating ? (
+                <div className="flex flex-col items-center">
+                  <Loader className="h-8 w-8 animate-spin mb-4" />
+                  <p>Generating your memes...</p>
+                </div>
+              ) : (
+                'No images generated yet'
+              )}
             </div>
           )}
           <Button variant="outline" size="icon" className="absolute top-2 right-2 z-10" onClick={toggleFullSize}>
@@ -80,13 +95,16 @@ export default function ImageStudio() {
 
       <div className="p-4 flex-shrink-0">
         <div className="max-w-2xl mx-auto">
-          <QuickAccessTools onPromptSubmit={handlePromptSubmit} />
+          <QuickAccessTools
+            onPromptSubmit={handlePromptSubmit}
+            isGenerating={isGenerating}
+          />
         </div>
       </div>
 
       {selectedImage && (
         <ImageModal
-          src={selectedImage || '/placeholder.svg'}
+          src={selectedImage || '/images/meme-placeholder.png'}
           alt="Full-size generated image"
           onClose={() => setSelectedImage(null)}
         />

@@ -52,7 +52,8 @@ class MemeGenerator:
     def save(self, output_path):
         self.base_image.save(output_path)
 
-def main():
+def test_upload_and_download():
+    """Test uploading an image to Digital Ocean Spaces and then downloading it back"""
     # Generate a unique ID for the filename
     meme_uuid = str(uuid.uuid4())
     logger.info(f"Generated UUID: {meme_uuid}")
@@ -86,6 +87,7 @@ def main():
     logger.info(f"Meme saved locally to {output_path}")
     
     # Upload to Digital Ocean Spaces
+    cdn_url = None
     try:
         uploader = S3Uploader()
         cdn_url = uploader.upload_image(generator.base_image, meme_uuid)
@@ -93,8 +95,91 @@ def main():
             logger.info(f"Meme uploaded to CDN: {cdn_url}")
         else:
             logger.error("Failed to upload meme to CDN")
+            return
     except Exception as e:
         logger.error(f"Error uploading to CDN: {str(e)}")
+        return
+    
+    # Now try to download the image back from Digital Ocean Spaces
+    try:
+        import requests
+        from io import BytesIO
+        
+        logger.info(f"Attempting to download image from: {cdn_url}")
+        
+        # Try with different timeout values
+        for timeout in [(5, 10), (15, 30), (30, 60)]:
+            try:
+                logger.info(f"Trying with timeout: {timeout}")
+                response = requests.get(cdn_url, timeout=timeout)
+                response.raise_for_status()
+                
+                # If we get here, the download was successful
+                downloaded_image = Image.open(BytesIO(response.content))
+                logger.info(f"Successfully downloaded image with dimensions: {downloaded_image.size}")
+                
+                # Save the downloaded image for comparison
+                downloaded_path = "tests/meme_downloaded.jpg"
+                downloaded_image.save(downloaded_path)
+                logger.info(f"Downloaded image saved to: {downloaded_path}")
+                
+                # Success with this timeout
+                logger.info(f"Download successful with timeout: {timeout}")
+                break
+            except requests.exceptions.Timeout:
+                logger.warning(f"Timeout occurred with timeout values: {timeout}")
+                # Continue to the next timeout value
+            except Exception as e:
+                logger.error(f"Error downloading with timeout {timeout}: {str(e)}")
+                # Continue to the next timeout value
+    except Exception as e:
+        logger.error(f"Error in download test: {str(e)}")
+
+def test_download_meme_template():
+    """Test downloading a meme template from Digital Ocean Spaces"""
+    try:
+        import requests
+        from io import BytesIO
+        
+        # Try to download a meme template that's failing in the TextOverlay class
+        template_url = "https://memulacra.nyc3.digitaloceanspaces.com/memes/Expanding-Brain.jpg"
+        logger.info(f"Attempting to download template from: {template_url}")
+        
+        # Try with different timeout values
+        for timeout in [(5, 10), (15, 30), (30, 60)]:
+            try:
+                logger.info(f"Trying with timeout: {timeout}")
+                response = requests.get(template_url, timeout=timeout)
+                response.raise_for_status()
+                
+                # If we get here, the download was successful
+                downloaded_image = Image.open(BytesIO(response.content))
+                logger.info(f"Successfully downloaded template with dimensions: {downloaded_image.size}")
+                
+                # Save the downloaded image
+                downloaded_path = "tests/template_downloaded.jpg"
+                downloaded_image.save(downloaded_path)
+                logger.info(f"Downloaded template saved to: {downloaded_path}")
+                
+                # Success with this timeout
+                logger.info(f"Template download successful with timeout: {timeout}")
+                break
+            except requests.exceptions.Timeout:
+                logger.warning(f"Timeout occurred with timeout values: {timeout}")
+                # Continue to the next timeout value
+            except Exception as e:
+                logger.error(f"Error downloading template with timeout {timeout}: {str(e)}")
+                # Continue to the next timeout value
+    except Exception as e:
+        logger.error(f"Error in template download test: {str(e)}")
+
+def main():
+    """Run the tests"""
+    logger.info("Starting meme text test")
+    test_upload_and_download()
+    logger.info("Testing template download")
+    test_download_meme_template()
+    logger.info("Test completed")
 
 if __name__ == "__main__":
     main()

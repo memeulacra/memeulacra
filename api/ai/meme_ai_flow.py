@@ -3,7 +3,26 @@ import requests
 import json
 import logging
 import time
+from typing import List, Dict, Any, Optional, Tuple
+from contextlib import contextmanager
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from pgvector.psycopg2 import register_vector
+import numpy as np
+import torch
+from ai.text_overlay import TextOverlay
+from ai.s3_uploader import S3Uploader
+from transformers import AutoTokenizer, AutoModel
+from dotenv import load_dotenv
+import anthropic
+import asyncio
+import os
+import requests
+import json
+import logging
+import time
 from typing import List
+from contextlib import contextmanager
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from pgvector.psycopg2 import register_vector
@@ -32,7 +51,57 @@ logger = logging.getLogger(__name__)
 # Load environment variables from .env file
 load_dotenv()
 
-async def generate_meme_goals(context: str):
+class TimingStats:
+    """Utility class to track timing of operations in the pipeline"""
+    def __init__(self):
+        self.timings = {}
+        self.start_times = {}
+    
+    def start(self, operation_name):
+        """Start timing an operation"""
+        self.start_times[operation_name] = time.time()
+    
+    def end(self, operation_name):
+        """End timing an operation and record the duration"""
+        if operation_name in self.start_times:
+            duration = time.time() - self.start_times[operation_name]
+            if operation_name not in self.timings:
+                self.timings[operation_name] = []
+            self.timings[operation_name].append(duration)
+            logger.info(f"Operation '{operation_name}' took {duration:.2f} seconds")
+            return duration
+        return None
+    
+    def get_summary(self):
+        """Get a summary of all timing statistics"""
+        summary = {}
+        for op, times in self.timings.items():
+            summary[op] = {
+                "count": len(times),
+                "total": sum(times),
+                "average": sum(times) / len(times),
+                "min": min(times) if times else 0,
+                "max": max(times) if times else 0
+            }
+        return summary
+    
+    def log_summary(self):
+        """Log a summary of all timing statistics"""
+        summary = self.get_summary()
+        logger.info("=== Timing Summary ===")
+        for op, stats in sorted(summary.items(), key=lambda x: x[1]["total"], reverse=True):
+            logger.info(f"{op}: {stats['count']} calls, {stats['total']:.2f}s total, {stats['average']:.2f}s avg")
+
+@contextmanager
+def timed_operation(timing, operation_name):
+    """Context manager for timing operations"""
+    timing.start(operation_name)
+    try:
+        yield
+    finally:
+        timing.end(operation_name)
+
+async def generate_meme_goals(context: str, timing: TimingStats = None):
     """Generate meme goals for the given context using Claude API"""
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
     if not ANTHROPIC_API_KEY:
@@ -43,11 +112,13 @@ async def generate_meme_goals(context: str):
     
     try:
         # Use the RateLimiter to make the request
+        if timing:
+            timing.start("llm_goal_generation")
         response = await RateLimiter.make_anthropic_request(
             logger=logger,
             client=client,
             system_prompt=GOAL_GEN_SYSTEM_PROMPT,
-            user_prompt=format_goal_gen_user_prompt(context),
+            user_prompt=format_goal_gen_user_prompt(context, num_goals=2),
             max_tokens=700,
             temperature=0.7
         )
@@ -57,12 +128,16 @@ async def generate_meme_goals(context: str):
         # Try to parse the JSON directly first
         try:
             goals = json.loads(content)
+            if timing:
+                timing.end("llm_goal_generation")
             return goals
         except json.JSONDecodeError:
             # If parsing fails, use JsonRepairer
             logger.info("Initial JSON parsing failed, attempting repair...")
             repairer = JsonRepairer({"meme_goals": []})  # Simple schema
             fixed_json = await repairer.repair_json(content)
+            if timing:
+                timing.end("llm_goal_generation")
             return json.loads(fixed_json)
             
     except Exception as e:
@@ -82,8 +157,10 @@ except Exception as e:
     logger.error(f"Failed to load model: {str(e)}")
     raise
 
-def get_embedding(text: str) -> list:
+def get_embedding(text: str, timing: TimingStats = None) -> list:
     """Generate embedding for text using BGE model"""
+    if timing:
+        timing.start("embedding_generation")
     # Tokenize the input text
     encoded_input = tokenizer(
         text, 
@@ -102,19 +179,19 @@ def get_embedding(text: str) -> list:
         embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
         
     # Convert to numpy array for pgvector
-    return np.array(embeddings[0].tolist())
+    result = np.array(embeddings[0].tolist())
+    if timing:
+        timing.end("embedding_generation")
+    return result
 
-async def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
-    """Generate text variations for a meme template based on the goal and examples"""
-    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-    if not ANTHROPIC_API_KEY:
-        raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
-
-    # Get example memes for this template if available
+async def get_template_examples(template_name: str, timing: TimingStats = None) -> dict:
+    """Get example memes for a template by name"""
     examples = None
     try:
         # Extract template ID from the template object
         template_id = None
+        if timing:
+            timing.start("db_connect_examples")
         conn = psycopg2.connect(
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
@@ -123,32 +200,50 @@ async def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
             port=os.getenv("POSTGRES_PORT", "5432")
         )
         
+        if timing:
+            timing.end("db_connect_examples")
+            timing.start("db_query_examples")
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get template ID by name
             cur.execute("""
                 SELECT id 
                 FROM meme_templates 
                 WHERE name = %s
-            """, (template['name'],))
+            """, (template_name,))
             result = cur.fetchone()
             if result:
                 template_id = result['id']
-                examples = get_template_meme_examples(template_id)
+                examples = get_template_meme_examples(template_id, timing)
         conn.close()
+        if timing:
+            timing.end("db_query_examples")
+        return examples
     except Exception as e:
         logger.warning(f"Failed to get meme examples: {str(e)}")
         # Continue without examples if there's an error
+        return None
+
+async def generate_meme_texts(template: dict, goal: dict, context: str, timing: TimingStats = None) -> dict:
+    """Generate text variations for a meme template based on the goal and examples"""
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    if not ANTHROPIC_API_KEY:
+        raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+
+    # Get example memes for this template if available
+    examples = await get_template_examples(template['name'], timing)
 
     # Initialize Anthropic client
     client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY, base_url=None)
     
     try:
         # Use the RateLimiter to make the request
+        if timing:
+            timing.start("llm_text_generation")
         response = await RateLimiter.make_anthropic_request(
             logger=logger,
             client=client,
             system_prompt=GENERATE_MEME_TEXT_SYSTEM_PROMPT,
-            user_prompt=format_generate_meme_text_user_prompt(template, goal, context, examples),
+            user_prompt=format_generate_meme_text_user_prompt(template, goal, context, examples, num_variations=1),
             max_tokens=700,
             temperature=0.8
         )
@@ -158,26 +253,57 @@ async def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
         # Try to parse the JSON directly first
         try:
             text_choices = json.loads(content)
+            if timing:
+                timing.end("llm_text_generation")
             return text_choices
         except json.JSONDecodeError:
             # If parsing fails, use JsonRepairer
             logger.info("Initial JSON parsing failed, attempting repair...")
             repairer = JsonRepairer({"text_choices": []})
             fixed_json = await repairer.repair_json(content)
+            if timing:
+                timing.end("llm_text_generation")
             return json.loads(fixed_json)
             
     except Exception as e:
         logger.error(f"Error generating meme texts: {str(e)}")
         raise
 
-def find_similar_templates(goal: dict, top_k: int = 3) -> list:
+async def batch_generate_texts(templates: list, goal: dict, context: str, timing: TimingStats = None) -> list:
+    """Generate text variations for multiple templates in parallel"""
+    # Create tasks for all templates
+    text_generation_tasks = []
+    for template in templates:
+        task = generate_meme_texts(template, goal, context, timing)
+        text_generation_tasks.append((template, task))
+    
+    # Run all text generation tasks concurrently
+    results = await asyncio.gather(*(task for _, task in text_generation_tasks), return_exceptions=True)
+    
+    # Process results
+    processed_results = []
+    for (template, _), result in zip(text_generation_tasks, results):
+        if isinstance(result, Exception):
+            logger.error(f"Error generating text for template {template.get('name', 'unknown')}: {str(result)}")
+            continue
+        
+        processed_results.append({
+            "template": template,
+            "text_variations": result
+        })
+    
+    return processed_results
+
+def find_similar_templates(goal: dict, top_k: int = 2, timing: TimingStats = None) -> list:
     """Find similar meme templates using vector similarity search"""
     try:
         # Get embedding for the goal
         goal_text = f"{goal['goal']} {goal.get('explanation', '')}"
-        goal_embedding = get_embedding(goal_text)
+        goal_embedding = get_embedding(goal_text, timing)
         
         # Connect to database and register vector type
+        if timing:
+            timing.start("db_connect_templates")
         conn = psycopg2.connect(
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
@@ -186,6 +312,9 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
             port=os.getenv("POSTGRES_PORT", "5432")
         )
         register_vector(conn)
+        if timing:
+            timing.end("db_connect_templates")
+            timing.start("db_query_templates")
         
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Perform cosine similarity search
@@ -207,13 +336,15 @@ def find_similar_templates(goal: dict, top_k: int = 3) -> list:
             results = cur.fetchall()
             
         conn.close()
+        if timing:
+            timing.end("db_query_templates")
         return [dict(r) for r in results]
         
     except Exception as e:
         logger.error(f"Error finding similar templates: {str(e)}")
         raise
 
-def get_template_meme_examples(template_id: int) -> dict:
+def get_template_meme_examples(template_id: int, timing: TimingStats = None) -> dict:
     """
     Get example memes for a template:
     - Top 4 memes with highest thumbs up count
@@ -221,6 +352,8 @@ def get_template_meme_examples(template_id: int) -> dict:
     Returns dict with 'most_liked' and 'most_disliked' lists.
     """
     try:
+        if timing:
+            timing.start("db_connect_meme_examples")
         conn = psycopg2.connect(
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
@@ -228,6 +361,9 @@ def get_template_meme_examples(template_id: int) -> dict:
             host=os.getenv("POSTGRES_HOST", "db"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
+        if timing:
+            timing.end("db_connect_meme_examples")
+            timing.start("db_query_meme_examples")
         
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get top 4 most thumbs up memes
@@ -271,6 +407,8 @@ def get_template_meme_examples(template_id: int) -> dict:
             most_disliked = cur.fetchall()
             
         conn.close()
+        if timing:
+            timing.end("db_query_meme_examples")
         examples = {
             'most_liked': [dict(r) for r in most_liked],
             'most_disliked': [dict(r) for r in most_disliked]
@@ -286,14 +424,90 @@ def get_template_meme_examples(template_id: int) -> dict:
 # Initialize S3 uploader
 s3_uploader = S3Uploader()
 
+async def process_meme_image(template_image_url: str, meme: dict, timing: TimingStats = None) -> str:
+    """Process a single meme image - create text overlay and upload to S3"""
+    try:
+        # Initialize text overlay with template image
+        logger.info(f"Creating text overlay for template image: {template_image_url}")
+        if timing:
+            timing.start(f"text_overlay_{meme['uuid']}")
+        overlay = TextOverlay(template_image_url)
+        
+        # Add text to the image
+        # For simplicity, we'll use the first two text boxes as top and bottom text
+        top_text = meme["text_boxes"][0] or ""
+        bottom_text = meme["text_boxes"][1] or ""
+        logger.info(f"Adding text to meme: top='{top_text}', bottom='{bottom_text}'")
+        overlay.add_meme_text(top_text, bottom_text)
+        
+        if timing:
+            timing.end(f"text_overlay_{meme['uuid']}")
+        
+        # Upload to Digital Ocean Spaces using the UUID as filename
+        logger.info(f"Uploading meme image for UUID {meme['uuid']}")
+        if timing:
+            timing.start(f"s3_upload_{meme['uuid']}")
+        cdn_url = s3_uploader.upload_image(overlay.get_image(), meme["uuid"])
+        if timing:
+            timing.end(f"s3_upload_{meme['uuid']}")
+        
+        if cdn_url:
+            logger.info(f"Created meme image and uploaded to {cdn_url}")
+            return cdn_url
+        else:
+            logger.error(f"Failed to upload meme image for UUID {meme['uuid']}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error creating meme image: {str(e)}")
+        logger.error(f"Template image URL: {template_image_url}")
+        logger.error(f"Meme data: {meme}")
+        return None
+
+async def batch_process_images(uuid_memes: list, template_urls: dict, timing: TimingStats = None) -> list:
+    """Process multiple meme images in parallel"""
+    if timing:
+        timing.start("image_generation_and_upload")
+    
+    # Create tasks for all memes
+    image_tasks = []
+    for meme in uuid_memes:
+        template_image_url = template_urls.get(meme["template_id"])
+        if not template_image_url:
+            logger.error(f"Template {meme['template_id']} not found")
+            continue
+            
+        task = process_meme_image(template_image_url, meme, timing)
+        image_tasks.append((meme, task))
+    
+    # Run all image tasks concurrently
+    results = await asyncio.gather(*(task for _, task in image_tasks), return_exceptions=True)
+    
+    # Process results
+    for (meme, _), result in zip(image_tasks, results):
+        if isinstance(result, Exception):
+            logger.error(f"Error processing image for meme {meme['uuid']}: {str(result)}")
+            meme["cdn_url"] = None
+        else:
+            meme["cdn_url"] = result
+    
+    if timing:
+        timing.end("image_generation_and_upload")
+    
+    return uuid_memes
+
 async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
     """
     Generate memes for a list of UUIDs using the given context.
     Returns a list of dicts containing UUID, text boxes, and CDN URL.
     """
+    # Initialize timing stats
+    timing = TimingStats()
+    timing.start("total_pipeline")
 
     try:
         # Connect to database
+        timing.start("db_connect_initial")
         conn = psycopg2.connect(
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
@@ -301,8 +515,10 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
             host=os.getenv("POSTGRES_HOST", "db"),
             port=os.getenv("POSTGRES_PORT", "5432")
         )
+        timing.end("db_connect_initial")
         
         # Verify all UUIDs exist
+        timing.start("db_verify_uuids")
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id FROM memes 
@@ -312,9 +528,10 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
             if len(found_uuids) != len(uuids):
                 missing = set(uuids) - set(found_uuids)
                 raise ValueError(f"UUIDs not found in database: {missing}")
+        timing.end("db_verify_uuids")
 
         # Generate meme goals
-        goals = await generate_meme_goals(context)
+        goals = await generate_meme_goals(context, timing)
         logger.info(f"Generated meme goals: {json.dumps(goals, indent=2)}")
         
         if "meme_goals" not in goals:
@@ -324,12 +541,17 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
         # Generate all possible memes
         generated_memes = []
         for goal in goals["meme_goals"]:
-            templates = find_similar_templates(goal)
+            templates = find_similar_templates(goal, timing=timing)
             logger.info(f"Found similar templates for goal '{goal.get('goal', '')}': {json.dumps(templates, indent=2)}")
             
-            for template in templates:
-                text_variations = await generate_meme_texts(template, goal, context)
-                logger.info(f"Generated text variations: {json.dumps(text_variations, indent=2)}")
+            # Generate text for all templates in parallel
+            template_results = await batch_generate_texts(templates, goal, context, timing)
+            
+            for result in template_results:
+                template = result["template"]
+                text_variations = result["text_variations"]
+                
+                logger.info(f"Generated text variations for template {template.get('name', 'unknown')}: {json.dumps(text_variations, indent=2)}")
                 
                 if "text_choices" not in text_variations:
                     logger.error(f"No text_choices in variations: {text_variations}")
@@ -372,44 +594,26 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
                 "text_boxes": meme["text_boxes"]
             })
         
-        # Get template image URLs and create meme images
+        # Get all template image URLs in a single query
+        template_urls = {}
+        template_ids = list(set(meme["template_id"] for meme in uuid_memes))
+        
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            for meme in uuid_memes:
-                # Get template image URL
-                cur.execute("""
-                    SELECT image_url 
-                    FROM meme_templates 
-                    WHERE id = %s
-                """, (meme["template_id"],))
-                template = cur.fetchone()
-                
-                if not template:
-                    logger.error(f"Template {meme['template_id']} not found")
-                    continue
-                
-                # Create text overlay
-                try:
-                    # Initialize text overlay with template image
-                    overlay = TextOverlay(template["image_url"])
-                    
-                    # Add text to the image
-                    # For simplicity, we'll use the first two text boxes as top and bottom text
-                    top_text = meme["text_boxes"][0] or ""
-                    bottom_text = meme["text_boxes"][1] or ""
-                    overlay.add_meme_text(top_text, bottom_text)
-                    
-                    # Upload to Digital Ocean Spaces using the UUID as filename
-                    cdn_url = s3_uploader.upload_image(overlay.get_image(), meme["uuid"])
-                    
-                    # Update meme with CDN URL
-                    meme["cdn_url"] = cdn_url
-                    logger.info(f"Created meme image and uploaded to {cdn_url}")
-                    
-                except Exception as e:
-                    logger.error(f"Error creating meme image: {str(e)}")
-                    meme["cdn_url"] = None
+            placeholders = ", ".join(["%s"] * len(template_ids))
+            cur.execute(f"""
+                SELECT id, image_url 
+                FROM meme_templates 
+                WHERE id IN ({placeholders})
+            """, template_ids)
             
+            for row in cur.fetchall():
+                template_urls[row["id"]] = row["image_url"]
+        
+        # Process all meme images in parallel
+        uuid_memes = await batch_process_images(uuid_memes, template_urls, timing)
+        
         # Update database with generated memes and CDN URLs
+        timing.start("db_update_memes")
         with conn.cursor() as cur:
             for meme in uuid_memes:
                 # Only update if we have a CDN URL (to avoid not-null constraint violation)
@@ -467,6 +671,11 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
             conn.commit()
             
         conn.close()
+        timing.end("db_update_memes")
+        
+        # Log timing summary
+        timing.end("total_pipeline")
+        timing.log_summary()
         
         # Return results in specified format
         return [{
@@ -482,9 +691,12 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
 if __name__ == "__main__":
     import asyncio
     
+    # Test configuration
+    NUM_TEST_MEMES = 4  # Number of memes to generate in the test
+    
     # Test the batch generation
     TEST_CONTEXT = "Insecure people criticize when youre doing things that they dont"
-    TEST_UUIDS = ["test-uuid-1", "test-uuid-2"]  # Replace with real UUIDs for testing
+    TEST_UUIDS = [f"test-uuid-{i+1}" for i in range(NUM_TEST_MEMES)]  # Generate test UUIDs
     
     async def main():
         try:
