@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus, Download } from "lucide-react"
+import { Plus, Download, Trash2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/components/ui/use-toast"
 
@@ -277,6 +277,50 @@ export default function MemeEditor() {
     }
   }
 
+  const clearTextBoxes = async () => {
+    if (!selectedTemplate) return
+
+    try {
+      setIsLoading(true)
+      log(`Clearing text boxes for template ${selectedTemplate.id}`)
+      
+      const response = await fetch(`/api/meme-templates/${selectedTemplate.id}/coordinates`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        }
+      })
+
+      if (response.ok) {
+        log("Text boxes cleared successfully")
+        // Clear the boxes in the UI
+        setBoxes([])
+        toast({
+          title: "Success",
+          description: "Text boxes cleared successfully",
+        })
+      } else {
+        const errorText = await response.text()
+        log(`Failed to clear text boxes: ${response.status} ${errorText}`)
+        toast({
+          title: "Error",
+          description: "Failed to clear text boxes",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      log(`Error clearing text boxes: ${error}`)
+      console.error("Error clearing text boxes:", error)
+      toast({
+        title: "Error",
+        description: "An error occurred while clearing text boxes",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Meme Box Editor</h1>
@@ -372,9 +416,14 @@ export default function MemeEditor() {
         <Button onClick={addBox} disabled={isLoading}>
           <Plus className="mr-2 h-4 w-4" /> Add Box
         </Button>
-        <Button onClick={saveBoxCoordinates} disabled={isLoading}>
-          <Download className="mr-2 h-4 w-4" /> {isLoading ? "Saving..." : "Save Box Coordinates"}
-        </Button>
+        <div className="flex space-x-2">
+          <Button onClick={saveBoxCoordinates} disabled={isLoading}>
+            <Download className="mr-2 h-4 w-4" /> {isLoading ? "Saving..." : "Save Box Coordinates"}
+          </Button>
+          <Button onClick={clearTextBoxes} disabled={isLoading} variant="destructive">
+            <Trash2 className="mr-2 h-4 w-4" /> Clear Text Boxes
+          </Button>
+        </div>
       </div>
 
       {/* Debug log display */}
