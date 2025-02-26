@@ -3,3 +3,5 @@ psycopg2
 python-dotenv
 boto3
 pillow
+matplotlib
+anthropic
