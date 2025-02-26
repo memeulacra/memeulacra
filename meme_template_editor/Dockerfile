@@ -1,12 +1,21 @@
-FROM node:18-alpine
+FROM node:22-slim
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package.json package-lock.json* ./
+# Install Python, build essentials, and PostgreSQL development files for node-gyp
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    postgresql-client \
+    libpq-dev \
+    && ln -sf /usr/bin/python3 /usr/bin/python
 
-# Install dependencies
-RUN npm ci
+# Copy package.json
+COPY package.json ./
+
+# Install dependencies with legacy-peer-deps to handle dependency conflicts
+RUN npm install --legacy-peer-deps
 
 # Copy the rest of the application
 COPY . .

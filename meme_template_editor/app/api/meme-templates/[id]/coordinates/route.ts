@@ -1,31 +1,54 @@
 import { NextResponse } from "next/server"
 import pool from "@/lib/db"
 
+// Create a simple logger
+const logger = {
+  info: (message: string) => {
+    console.log(`[INFO] ${new Date().toISOString()}: ${message}`)
+  },
+  error: (message: string, error?: any) => {
+    console.error(`[ERROR] ${new Date().toISOString()}: ${message}`, error || '')
+  }
+}
+
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   const { id } = params
-  const { coordinates } = await request.json()
-
+  logger.info(`PUT /api/meme-templates/${id}/coordinates - Updating coordinates`)
+  
   try {
+    const body = await request.json()
+    const { coordinates } = body
+    
+    logger.info(`Received coordinates for template ${id}: ${JSON.stringify(coordinates)}`)
+
     // First check if the meme template already has text_box_coordinates
+    logger.info(`Checking if template ${id} exists`)
     const checkResult = await pool.query(
       "SELECT text_box_coordinates FROM meme_templates WHERE id = $1",
       [id]
     )
     
     if (checkResult.rows.length === 0) {
+      logger.error(`Template ${id} not found`)
       return NextResponse.json({ error: "Meme template not found" }, { status: 404 })
     }
 
+    logger.info(`Template ${id} found, updating coordinates`)
+    
     // Update the text_box_coordinates field with the new coordinates
     // The database expects a JSONB[] array, so we wrap the coordinates in an array
+    const jsonCoordinates = JSON.stringify(coordinates)
+    logger.info(`Saving coordinates as JSON: ${jsonCoordinates}`)
+    
     await pool.query("UPDATE meme_templates SET text_box_coordinates = $1 WHERE id = $2", [
-      [JSON.stringify(coordinates)], // Wrap in array to match JSONB[] type
+      [jsonCoordinates], // Wrap in array to match JSONB[] type
       id,
     ])
     
+    logger.info(`Coordinates for template ${id} updated successfully`)
     return NextResponse.json({ message: "Coordinates updated successfully" })
   } catch (error) {
-    console.error("Error updating coordinates:", error)
+    logger.error(`Error updating coordinates for template ${id}:`, error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

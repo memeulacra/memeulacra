@@ -62,7 +62,7 @@ services:
       DATABASE_URL: postgres://memeuser:memepass@db:5432/memedb
       NEXT_PUBLIC_ONCHAINKIT_API_KEY: 6IXH4m79EVAdWozcD7k0jznfCXVyQCZl
       NODE_ENV: production
-      DEBUG: true
+      DEBUG: "true"
       PORT: 3005
     depends_on:
       - db
