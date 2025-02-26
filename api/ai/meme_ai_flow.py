@@ -103,45 +103,99 @@ def timed_operation(timing, operation_name):
 
 async def generate_meme_goals(context: str, timing: TimingStats = None):
     """Generate meme goals for the given context using Claude API"""
+    logger.info(f"Starting generate_meme_goals with context length: {len(context)} chars")
+    start_time = time.time()
+    
+    # Check API key
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
     if not ANTHROPIC_API_KEY:
+        logger.error("ANTHROPIC_API_KEY environment variable is not set")
         raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+    else:
+        # Log key status without exposing the actual key
+        key_preview = ANTHROPIC_API_KEY[:4] + "..." + ANTHROPIC_API_KEY[-4:] if len(ANTHROPIC_API_KEY) > 8 else "***"
+        logger.info(f"Using Anthropic API key: {key_preview}")
 
+    logger.info("Initializing Anthropic client")
     # Initialize Anthropic client
     client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY, base_url=None)
+    logger.info("Anthropic client initialized")
     
     try:
         # Use the RateLimiter to make the request
         if timing:
             timing.start("llm_goal_generation")
+        
+        logger.info("Preparing to make Anthropic API request for meme goals")
+        logger.info(f"System prompt length: {len(GOAL_GEN_SYSTEM_PROMPT)} chars")
+        user_prompt = format_goal_gen_user_prompt(context, num_goals=2)
+        logger.info(f"User prompt length: {len(user_prompt)} chars")
+        
+        logger.info("Making Anthropic API request...")
+        request_start_time = time.time()
+        
         response = await RateLimiter.make_anthropic_request(
             logger=logger,
             client=client,
             system_prompt=GOAL_GEN_SYSTEM_PROMPT,
-            user_prompt=format_goal_gen_user_prompt(context, num_goals=2),
+            user_prompt=user_prompt,
             max_tokens=700,
             temperature=0.7
         )
         
+        request_duration = time.time() - request_start_time
+        logger.info(f"Anthropic API request completed in {request_duration:.2f} seconds")
+        
+        if not response:
+            logger.error("Received empty response from Anthropic API")
+            raise ValueError("Empty response from Anthropic API")
+            
+        if not hasattr(response, 'content') or not response.content:
+            logger.error(f"Invalid response structure: {response}")
+            raise ValueError("Invalid response structure from Anthropic API")
+            
         content = response.content[0].text
+        logger.info(f"Received response with content length: {len(content)} chars")
         
         # Try to parse the JSON directly first
         try:
+            logger.info("Attempting to parse JSON response")
             goals = json.loads(content)
+            logger.info(f"Successfully parsed JSON with {len(goals.get('meme_goals', []))} goals")
             if timing:
                 timing.end("llm_goal_generation")
+            
+            total_duration = time.time() - start_time
+            logger.info(f"generate_meme_goals completed in {total_duration:.2f} seconds")
             return goals
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as json_err:
             # If parsing fails, use JsonRepairer
-            logger.info("Initial JSON parsing failed, attempting repair...")
+            logger.warning(f"Initial JSON parsing failed: {str(json_err)}")
+            logger.info("Attempting JSON repair...")
             repairer = JsonRepairer({"meme_goals": []})  # Simple schema
+            repair_start_time = time.time()
             fixed_json = await repairer.repair_json(content)
+            repair_duration = time.time() - repair_start_time
+            logger.info(f"JSON repair completed in {repair_duration:.2f} seconds")
+            
             if timing:
                 timing.end("llm_goal_generation")
-            return json.loads(fixed_json)
+                
+            parsed_goals = json.loads(fixed_json)
+            logger.info(f"Successfully parsed repaired JSON with {len(parsed_goals.get('meme_goals', []))} goals")
+            
+            total_duration = time.time() - start_time
+            logger.info(f"generate_meme_goals completed in {total_duration:.2f} seconds")
+            return parsed_goals
             
     except Exception as e:
-        logger.error(f"Error generating meme goals: {str(e)}")
+        logger.error(f"Error generating meme goals: {str(e)}", exc_info=True)
+        logger.error(f"Error type: {type(e).__name__}")
+        if hasattr(e, 'response') and hasattr(e.response, 'status_code'):
+            logger.error(f"HTTP Status Code: {e.response.status_code}")
+        
+        total_duration = time.time() - start_time
+        logger.error(f"generate_meme_goals failed after {total_duration:.2f} seconds")
         raise
 
 # Initialize the model and tokenizer globally for reuse
@@ -225,48 +279,107 @@ async def get_template_examples(template_name: str, timing: TimingStats = None) 
 
 async def generate_meme_texts(template: dict, goal: dict, context: str, timing: TimingStats = None) -> dict:
     """Generate text variations for a meme template based on the goal and examples"""
+    logger.info(f"Starting generate_meme_texts for template: {template.get('name', 'unknown')}")
+    start_time = time.time()
+    
+    # Check API key
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
     if not ANTHROPIC_API_KEY:
+        logger.error("ANTHROPIC_API_KEY environment variable is not set")
         raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+    else:
+        # Log key status without exposing the actual key
+        key_preview = ANTHROPIC_API_KEY[:4] + "..." + ANTHROPIC_API_KEY[-4:] if len(ANTHROPIC_API_KEY) > 8 else "***"
+        logger.info(f"Using Anthropic API key: {key_preview}")
 
     # Get example memes for this template if available
+    logger.info(f"Fetching examples for template: {template.get('name', 'unknown')}")
     examples = await get_template_examples(template['name'], timing)
+    if examples:
+        logger.info(f"Found {len(examples.get('most_liked', []))} liked and {len(examples.get('most_disliked', []))} disliked examples")
+    else:
+        logger.info("No examples found for this template")
 
+    logger.info("Initializing Anthropic client for text generation")
     # Initialize Anthropic client
     client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY, base_url=None)
+    logger.info("Anthropic client initialized")
     
     try:
         # Use the RateLimiter to make the request
         if timing:
             timing.start("llm_text_generation")
+        
+        logger.info("Preparing to make Anthropic API request for meme text generation")
+        logger.info(f"System prompt length: {len(GENERATE_MEME_TEXT_SYSTEM_PROMPT)} chars")
+        user_prompt = format_generate_meme_text_user_prompt(template, goal, context, examples, num_variations=1)
+        logger.info(f"User prompt length: {len(user_prompt)} chars")
+        
+        logger.info("Making Anthropic API request for text generation...")
+        request_start_time = time.time()
+        
         response = await RateLimiter.make_anthropic_request(
             logger=logger,
             client=client,
             system_prompt=GENERATE_MEME_TEXT_SYSTEM_PROMPT,
-            user_prompt=format_generate_meme_text_user_prompt(template, goal, context, examples, num_variations=1),
+            user_prompt=user_prompt,
             max_tokens=700,
             temperature=0.8
         )
         
+        request_duration = time.time() - request_start_time
+        logger.info(f"Anthropic API request for text generation completed in {request_duration:.2f} seconds")
+        
+        if not response:
+            logger.error("Received empty response from Anthropic API for text generation")
+            raise ValueError("Empty response from Anthropic API")
+            
+        if not hasattr(response, 'content') or not response.content:
+            logger.error(f"Invalid response structure for text generation: {response}")
+            raise ValueError("Invalid response structure from Anthropic API")
+            
         content = response.content[0].text
+        logger.info(f"Received text generation response with content length: {len(content)} chars")
         
         # Try to parse the JSON directly first
         try:
+            logger.info("Attempting to parse JSON response for text generation")
             text_choices = json.loads(content)
+            logger.info(f"Successfully parsed JSON with {len(text_choices.get('text_choices', []))} text choices")
             if timing:
                 timing.end("llm_text_generation")
+            
+            total_duration = time.time() - start_time
+            logger.info(f"generate_meme_texts completed in {total_duration:.2f} seconds")
             return text_choices
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as json_err:
             # If parsing fails, use JsonRepairer
-            logger.info("Initial JSON parsing failed, attempting repair...")
+            logger.warning(f"Initial JSON parsing failed for text generation: {str(json_err)}")
+            logger.info("Attempting JSON repair for text generation...")
             repairer = JsonRepairer({"text_choices": []})
+            repair_start_time = time.time()
             fixed_json = await repairer.repair_json(content)
+            repair_duration = time.time() - repair_start_time
+            logger.info(f"JSON repair for text generation completed in {repair_duration:.2f} seconds")
+            
             if timing:
                 timing.end("llm_text_generation")
-            return json.loads(fixed_json)
+                
+            parsed_choices = json.loads(fixed_json)
+            logger.info(f"Successfully parsed repaired JSON with {len(parsed_choices.get('text_choices', []))} text choices")
+            
+            total_duration = time.time() - start_time
+            logger.info(f"generate_meme_texts completed in {total_duration:.2f} seconds")
+            return parsed_choices
             
     except Exception as e:
-        logger.error(f"Error generating meme texts: {str(e)}")
+        logger.error(f"Error generating meme texts: {str(e)}", exc_info=True)
+        logger.error(f"Error type: {type(e).__name__}")
+        if hasattr(e, 'response') and hasattr(e.response, 'status_code'):
+            logger.error(f"HTTP Status Code: {e.response.status_code}")
+        
+        total_duration = time.time() - start_time
+        logger.error(f"generate_meme_texts failed after {total_duration:.2f} seconds")
         raise
 
 async def batch_generate_texts(templates: list, goal: dict, context: str, timing: TimingStats = None) -> list:

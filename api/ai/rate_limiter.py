@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 import asyncio
 import logging
 import os
+import time
 
 
 @dataclass
@@ -128,12 +129,19 @@ class RateLimiter:
         messages=None,
     ):
         """Helper function to make Anthropic API requests with rate limiting and header handling"""
+        request_start_time = datetime.now(timezone.utc)
+        logger.info(f"Starting Anthropic API request at {request_start_time.isoformat()}")
+        
+        # Check rate limits before making request
         should_wait, wait_time = RateLimiter.should_wait_global(logger)
         if should_wait:
-            logger.info(f"Sleeping {wait_time}s before calling anthropic")
+            logger.warning(f"Rate limit reached. Sleeping {wait_time:.2f}s before calling Anthropic API")
             await asyncio.sleep(wait_time)
+            logger.info(f"Resuming after rate limit wait of {wait_time:.2f}s")
 
+        # Prepare messages
         if messages is None:
+            logger.info(f"Creating message with system prompt ({len(system_prompt)} chars) and user prompt ({len(user_prompt)} chars)")
             messages = [
                 {
                     "role": "user",
@@ -145,42 +153,101 @@ class RateLimiter:
                     ],
                 }
             ]
+        else:
+            logger.info(f"Using provided messages array with {len(messages)} messages")
 
         # Get model from environment variable or use default
         model = os.getenv("CLAUDE_MODEL", "claude-3-5-haiku-20241022")
+        logger.info(f"Using Anthropic model: {model}")
+        logger.info(f"Request parameters: max_tokens={max_tokens}, temperature={temperature}")
         
-        # Use create_raw to get access to headers
-        raw_response = await client.messages.with_raw_response.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=messages,
-        )
+        # Track retry attempts
+        retry_count = 0
+        max_retries = 5  # We'll log this but not enforce it yet
+        
+        try:
+            # Use create_raw to get access to headers
+            logger.info("Sending request to Anthropic API...")
+            api_call_start = time.time()
+            
+            raw_response = await client.messages.with_raw_response.create(
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_prompt,
+                messages=messages,
+            )
+            
+            api_call_duration = time.time() - api_call_start
+            logger.info(f"Anthropic API raw response received in {api_call_duration:.2f} seconds")
 
-        # Extract rate limit headers
-        ratelimit_requests_limit = raw_response.headers.get(
-            "anthropic-ratelimit-requests-limit"
-        )
-        ratelimit_requests_remaining = raw_response.headers.get(
-            "anthropic-ratelimit-requests-remaining"
-        )
-        # ratelimit_requests_reset = raw_response.headers.get(
-        #     "anthropic-ratelimit-requests-reset"
-        # )
+            # Extract rate limit headers
+            ratelimit_requests_limit = raw_response.headers.get(
+                "anthropic-ratelimit-requests-limit"
+            )
+            ratelimit_requests_remaining = raw_response.headers.get(
+                "anthropic-ratelimit-requests-remaining"
+            )
+            ratelimit_requests_reset = raw_response.headers.get(
+                "anthropic-ratelimit-requests-reset"
+            )
+            
+            # Log all headers for debugging
+            logger.info("Anthropic API response headers:")
+            for header, value in raw_response.headers.items():
+                if header.startswith("anthropic-"):
+                    logger.info(f"  {header}: {value}")
 
-        logger.info(
-            f"Rate Limit Counts: {ratelimit_requests_remaining}/{ratelimit_requests_limit}"
-        )
-        # logger.info(f"Rate Limit Headers:")
-        # logger.info(f"Requests Limit: {ratelimit_requests_limit}")
-        # logger.info(f"Remaining Requests: {ratelimit_requests_remaining}")
-        # logger.info(f"Reset Time: {ratelimit_requests_reset}")
+            logger.info(
+                f"Rate Limit Status: {ratelimit_requests_remaining}/{ratelimit_requests_limit} requests remaining"
+            )
+            logger.info(f"Rate Limit Reset: {ratelimit_requests_reset}")
 
-        # Update rate limiter with headers from raw response
-        RateLimiter.update_anthropic_response(logger, raw_response.headers)
+            # Update rate limiter with headers from raw response
+            RateLimiter.update_anthropic_response(logger, raw_response.headers)
 
-        # Parse the response
-        parsed_response = raw_response.parse()
-        # logger.info(f"Parsed response is {parsed_response}")
-        return parsed_response
+            # Parse the response
+            logger.info("Parsing Anthropic API response...")
+            parse_start = time.time()
+            parsed_response = raw_response.parse()
+            parse_duration = time.time() - parse_start
+            logger.info(f"Response parsed in {parse_duration:.2f} seconds")
+            
+            # Log response structure (without content)
+            if hasattr(parsed_response, 'id'):
+                logger.info(f"Response ID: {parsed_response.id}")
+            if hasattr(parsed_response, 'model'):
+                logger.info(f"Response Model: {parsed_response.model}")
+            if hasattr(parsed_response, 'content') and parsed_response.content:
+                logger.info(f"Response has {len(parsed_response.content)} content blocks")
+                
+            total_duration = time.time() - api_call_start
+            logger.info(f"Total Anthropic API request completed in {total_duration:.2f} seconds")
+            
+            return parsed_response
+            
+        except Exception as e:
+            retry_count += 1
+            error_time = time.time() - api_call_start
+            logger.error(f"Anthropic API request failed after {error_time:.2f} seconds on attempt {retry_count}/{max_retries}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+            
+            # Log detailed error information
+            if hasattr(e, 'status_code'):
+                logger.error(f"HTTP Status Code: {e.status_code}")
+            if hasattr(e, 'headers'):
+                logger.error(f"Error response headers: {e.headers}")
+            if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                logger.error(f"Error response body: {e.response.text[:500]}...")
+                
+            # Check for specific error types
+            if "connection" in str(e).lower() or "timeout" in str(e).lower():
+                logger.error("Network connectivity issue detected")
+            if "rate limit" in str(e).lower() or "429" in str(e):
+                logger.error("Rate limiting issue detected")
+            if "authentication" in str(e).lower() or "401" in str(e):
+                logger.error("Authentication issue detected - check API key")
+                
+            # Re-raise the exception
+            raise
