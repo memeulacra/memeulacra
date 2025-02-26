@@ -75,6 +75,7 @@ CREATE INDEX ON user_interactions(meme_id);
 CREATE INDEX ON meme_templates USING ivfflat (embedding vector_cosine_ops);
 
 
+
 -- Create sessions table - uses UUID for consistency with your schema
 CREATE TABLE IF NOT EXISTS sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
