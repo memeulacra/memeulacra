@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useInView } from 'react-intersection-observer'
 import Image from 'next/image'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ImageModal } from '@/components/image-modal'
-import { Link2, ThumbsUp, ThumbsDown, Clock, CheckCircle, AlertCircle } from 'lucide-react'
+import { Link2, ThumbsUp, ThumbsDown, Clock, LogIn } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { useToast } from '@/hooks/useToast'
+import { useAuthStatus } from '@/hooks/useAuthStatus'
 
 interface Author {
   id: string
@@ -46,6 +47,8 @@ export default function MemeFeed({ initialSort = 'newest' }: MemeFeedProps) {
   const [hasMore, setHasMore] = useState(true)
   const [selectedMeme, setSelectedMeme] = useState<Meme | null>(null)
   const { toast } = useToast()
+  const router = useRouter()
+  const { isAuthenticated, isClientMounted } = useAuthStatus()
 
   // Set up IntersectionObserver for infinite scrolling
   const { ref, inView } = useInView({
@@ -207,8 +210,11 @@ export default function MemeFeed({ initialSort = 'newest' }: MemeFeedProps) {
     const meme = memes.find(m => m.id === memeId)
     if (meme?.user_interaction) {
       // User has already voted, don't allow changes
-      // Could show a toast notification here
-      console.log(`Already voted on this meme with: ${meme.user_interaction.interaction_type}`)
+      toast({
+        title: 'Already voted',
+        description: `You've already ${meme.user_interaction.interaction_type === 'like' ? 'liked' : 'disliked'} this meme`,
+        variant: 'default',
+      })
       return
     }
 
@@ -232,8 +238,11 @@ export default function MemeFeed({ initialSort = 'newest' }: MemeFeedProps) {
 
       // If already voted, just return
       if (result.alreadyVoted) {
-        // Could show a toast notification here
-        console.log('You have already voted on this meme')
+        toast({
+          title: 'Already voted',
+          description: `You've already ${result.interactionType} this meme`,
+          variant: 'default',
+        })
         return
       }
 
@@ -266,8 +275,72 @@ export default function MemeFeed({ initialSort = 'newest' }: MemeFeedProps) {
     }
   }
 
+  const handleLoginRedirect = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    // Get current path to redirect back after login
+    const returnUrl = window.location.pathname
+    router.push(`/profile?returnUrl=${encodeURIComponent(returnUrl)}`)
+  }
+
+  // Render vote buttons or login button based on authentication status
+  const renderVoteButtons = (meme: Meme) => {
+    if (!isClientMounted) {
+      // Return empty placeholder while checking auth state to prevent flashing
+      return <div className="h-8"></div>
+    }
+
+    if (!isAuthenticated) {
+      return (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 bg-black/50 hover:bg-purple-900/50 text-white flex items-center"
+          onClick={handleLoginRedirect}
+        >
+          <LogIn className="h-4 w-4 mr-1" />
+          <span className="text-xs">Log in to vote</span>
+        </Button>
+      )
+    }
+
+    return (
+      <div className="flex items-center space-x-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`h-8 bg-black/50 hover:bg-black/70 text-white flex items-center
+            ${meme.user_interaction ? (
+        meme.user_interaction.interaction_type === 'like'
+          ? 'text-green-400'
+          : 'opacity-50'
+      ) : 'hover:text-green-400'}`}
+          onClick={(e) => handleLike(e, meme.id)}
+          disabled={meme.user_interaction ? true : false}
+        >
+          <ThumbsUp className="h-4 w-4" />
+          <span className="text-xs ml-1">{meme.thumbs_up || 0}</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`h-8 bg-black/50 hover:bg-black/70 text-white flex items-center
+            ${meme.user_interaction ? (
+        meme.user_interaction.interaction_type === 'dislike'
+          ? 'text-red-400'
+          : 'opacity-50'
+      ) : 'hover:text-red-400'}`}
+          onClick={(e) => handleDislike(e, meme.id)}
+          disabled={meme.user_interaction ? true : false}
+        >
+          <ThumbsDown className="h-4 w-4" />
+          <span className="text-xs ml-1">{meme.thumbs_down || 0}</span>
+        </Button>
+      </div>
+    )
+  }
+
   return (
-    <div className="w-full max-w-6xl mx-auto px-4">
+    <div className="w-full mx-auto px-4">
       {/* Sort controls */}
       <div className="flex justify-center mb-6">
         <div className="inline-flex rounded-md shadow-sm" role="group">
@@ -298,7 +371,7 @@ export default function MemeFeed({ initialSort = 'newest' }: MemeFeedProps) {
       </div>
 
       {/* Meme grid - Changed to 2 columns */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 xl:gap-8">
         {memes.map((meme, index) => (
           <motion.div
             key={meme.id}
@@ -330,38 +403,7 @@ export default function MemeFeed({ initialSort = 'newest' }: MemeFeedProps) {
                         <Link2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className={`h-8 bg-black/50 hover:bg-black/70 text-white flex items-center space-x-1
-                          ${meme.user_interaction ? (
-            meme.user_interaction.interaction_type === 'like'
-              ? 'text-green-400'
-              : 'opacity-50'
-          ) : 'hover:text-green-400'}`}
-                        onClick={(e) => handleLike(e, meme.id)}
-                        disabled={meme.user_interaction ? true : false}
-                      >
-                        <ThumbsUp className="h-4 w-4" />
-                        <span className="text-xs ml-1">{meme.thumbs_up || 0}</span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className={`h-8 bg-black/50 hover:bg-black/70 text-white flex items-center space-x-1
-                          ${meme.user_interaction ? (
-            meme.user_interaction.interaction_type === 'dislike'
-              ? 'text-red-400'
-              : 'opacity-50'
-          ) : 'hover:text-red-400'}`}
-                        onClick={(e) => handleDislike(e, meme.id)}
-                        disabled={meme.user_interaction ? true : false}
-                      >
-                        <ThumbsDown className="h-4 w-4" />
-                        <span className="text-xs ml-1">{meme.thumbs_down || 0}</span>
-                      </Button>
-                    </div>
+                    {renderVoteButtons(meme)}
                   </div>
                   <div className="flex justify-between items-center mt-2">
                     <p className="text-white text-xs md:text-sm"></p>

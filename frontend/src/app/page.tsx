@@ -106,7 +106,7 @@ export default function Home() {
       </AnimatePresence>
 
       <section id="community" className={`px-4 py-12 bg-black/50 ${!showHero ? 'pt-20' : ''}`}>
-        <div className="max-w-7xl mx-auto">
+        <div className="p-8 mx-auto">
           <h2 className="text-3xl font-bold mb-2 text-center bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-500">
             Community Creations
           </h2>

@@ -1,15 +1,22 @@
+// middleware.ts
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { verifySession } from './lib/session'
 
-// List of paths that require authentication
-const AUTH_PATHS = [
+// List of paths that require authentication but show overlay instead of redirecting
+const CLIENT_AUTH_PATHS: string[] = [
   '/studio',
-  // Add more protected paths here
+  // Add other paths here that should show an overlay instead of redirect
+]
+
+// List of paths that require authentication and should redirect
+const SERVER_AUTH_PATHS: string[] = [
+  // Add paths here that should force redirect if not authenticated
+  // Example: '/admin', '/api/protected-endpoint'
 ]
 
 // List of paths that are always public
-const PUBLIC_PATHS = [
+const PUBLIC_PATHS: string[] = [
   '/',
   '/profile',
   '/login',
@@ -23,37 +30,45 @@ export async function middleware(request: NextRequest) {
   try {
     const pathname = request.nextUrl.pathname
 
-    // Generate canonical URL
+    // Generate canonical URL for domain handling
     const hostname = request.headers.get('host') || ''
     const protocol = request.nextUrl.protocol
-    const canonicalUrl = `${protocol}//memeularca.com${pathname}`
+    const canonicalUrl = `${protocol}//memeulacra.com${pathname}`
 
+    // Redirect www to non-www
     if (hostname === 'www.memeulacra.com') {
       console.log('REDIRECTING TO:', canonicalUrl)
-      const destinationUrl = `${canonicalUrl}`
-      return NextResponse.redirect(destinationUrl, 301)
+      return NextResponse.redirect(canonicalUrl, 301)
     }
 
-    // Check if the path needs authentication
-    const requiresAuth = AUTH_PATHS.some(path =>
+    // Check if path requires server-side redirect for authentication
+    const requiresServerAuth = SERVER_AUTH_PATHS.some(path =>
+      pathname === path || pathname.startsWith(`${path}/`))
+
+    // Skip auth check for client-auth paths (they'll handle auth in the component)
+    const isClientAuthPath = CLIENT_AUTH_PATHS.some(path =>
       pathname === path || pathname.startsWith(`${path}/`))
 
     // Skip middleware for public paths
     const isPublic = PUBLIC_PATHS.some(path =>
       pathname === path || pathname.startsWith(`${path}/`))
 
-    if (!requiresAuth || isPublic) {
+    // Skip middleware for client-auth or public paths
+    if (isClientAuthPath || isPublic) {
       return NextResponse.next()
     }
 
-    // Verify session
-    const address = await verifySession()
+    // Only verify session if we need server-side auth protection
+    if (requiresServerAuth) {
+      // Verify session
+      const address = await verifySession()
 
-    // If not authenticated and on a protected route, redirect to login
-    if (!address && requiresAuth) {
-      const loginUrl = new URL('/profile', request.url)
-      loginUrl.searchParams.set('from', pathname)
-      return NextResponse.redirect(loginUrl)
+      // If not authenticated and on a protected route, redirect to login
+      if (!address) {
+        const loginUrl = new URL('/profile', request.url)
+        loginUrl.searchParams.set('returnUrl', pathname)
+        return NextResponse.redirect(loginUrl)
+      }
     }
 
     return NextResponse.next()

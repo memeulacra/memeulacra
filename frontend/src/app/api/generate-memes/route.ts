@@ -128,7 +128,6 @@ export async function POST(req: Request) {
       }
 
       const generationResult = await apiResponse.json()
-      console.log('generationResult', generationResult)
 
       // Update meme records with the generated URLs
       const updatedMemes = []

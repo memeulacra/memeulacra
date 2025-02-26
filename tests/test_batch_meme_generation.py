@@ -40,7 +40,7 @@ def get_db_connection():
     try:
         return psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
     except psycopg2.Error as e:
-        logger.error(f"Failed to connect to database: {e}")
+        logger.error(f"counld not to connect to database: {e}")
         sys.exit(1)
 
 def check_database_prerequisites():

@@ -19,12 +19,12 @@ async function connectDb() {
     console.log('✅ Successfully connected to PostgreSQL database')
     client.release()
   } catch (error) {
-    console.error('❌ Failed to connect to database:', error)
+    console.error('❌ could not to connect to database:', error)
   }
 }
 
 // Call the function to test connection
-connectDb()
+// connectDb()
 
 // Export both the pool and a query helper function
 export default {
