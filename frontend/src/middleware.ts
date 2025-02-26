@@ -51,7 +51,7 @@ export async function middleware(request: NextRequest) {
 
     // If not authenticated and on a protected route, redirect to login
     if (!address && requiresAuth) {
-      const loginUrl = new URL('/login', request.url)
+      const loginUrl = new URL('/profile', request.url)
       loginUrl.searchParams.set('from', pathname)
       return NextResponse.redirect(loginUrl)
     }

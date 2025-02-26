@@ -34,22 +34,20 @@ services:
     depends_on:
       - db
 
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "3005:3005"
-  #   environment:
-  #     POSTGRES_DB: memedb
-  #     POSTGRES_USER: memeuser
-  #     POSTGRES_PASSWORD: memepass
-  #     NEXT_PUBLIC_ONCHAINKIT_API_KEY: 6IXH4m79EVAdWozcD7k0jznfCXVyQCZl
-  #     NODE_ENV: production
-  #     DEBUG: true
-  #     PORT: 3005
-  #   depends_on:
-  #     - db
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      DATABASE_URL: postgres://memeuser:memepass@db:5432/memedb
+      NEXT_PUBLIC_ONCHAINKIT_API_KEY: 6IXH4m79EVAdWozcD7k0jznfCXVyQCZl
+      NODE_ENV: production
+      DEBUG: true
+      PORT: 3005
+    depends_on:
+      - db
 
 volumes:
   postgres_data:

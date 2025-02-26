@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import asyncio
 import logging
 
@@ -20,33 +20,44 @@ class RateLimitInfo:
     @classmethod
     def from_headers(cls, headers: dict) -> "RateLimitInfo":
         """Create RateLimitInfo from API response headers"""
+        now = datetime.now(timezone.utc)
+        future = now + timedelta(seconds=60)  # Default to 60 seconds in the future
+        
+        def parse_date(date_str):
+            if not date_str:
+                return future
+            try:
+                return datetime.fromisoformat(date_str)
+            except ValueError:
+                return future
+        
         return cls(
             requests_remaining=int(
                 headers.get("anthropic-ratelimit-requests-remaining", 0)
             ),
-            requests_reset=datetime.fromisoformat(
-                headers.get("anthropic-ratelimit-requests-reset", "")
+            requests_reset=parse_date(
+                headers.get("anthropic-ratelimit-requests-reset")
             ),
             tokens_remaining=int(
                 headers.get("anthropic-ratelimit-tokens-remaining", 0)
             ),
-            tokens_reset=datetime.fromisoformat(
-                headers.get("anthropic-ratelimit-tokens-reset", "")
+            tokens_reset=parse_date(
+                headers.get("anthropic-ratelimit-tokens-reset")
             ),
             input_tokens_remaining=int(
                 headers.get("anthropic-ratelimit-input-tokens-remaining", 0)
             ),
-            input_tokens_reset=datetime.fromisoformat(
-                headers.get("anthropic-ratelimit-input-tokens-reset", "")
+            input_tokens_reset=parse_date(
+                headers.get("anthropic-ratelimit-input-tokens-reset")
             ),
             output_tokens_remaining=int(
                 headers.get("anthropic-ratelimit-output-tokens-remaining", 0)
             ),
-            output_tokens_reset=datetime.fromisoformat(
-                headers.get("anthropic-ratelimit-output-tokens-reset", "")
+            output_tokens_reset=parse_date(
+                headers.get("anthropic-ratelimit-output-tokens-reset")
             ),
             retry_after=int(headers.get("retry-after", 0)),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=now,
         )
 
     def should_wait(self, logger) -> tuple[bool, float]:
@@ -136,7 +147,7 @@ class RateLimiter:
 
         # Use create_raw to get access to headers
         raw_response = await client.messages.with_raw_response.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-3-7-sonnet-20250219",
             max_tokens=max_tokens,
             temperature=temperature,
             system=system_prompt,

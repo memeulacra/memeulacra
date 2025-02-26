@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 from PIL import Image, ImageDraw, ImageFont
 import os
+import uuid
+import sys
+import logging
+
+# Add the api directory to the Python path so we can import the S3Uploader
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from api.ai.s3_uploader import S3Uploader
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class MemeGenerator:
     def __init__(self, image_path):
@@ -42,6 +53,10 @@ class MemeGenerator:
         self.base_image.save(output_path)
 
 def main():
+    # Generate a unique ID for the filename
+    meme_uuid = str(uuid.uuid4())
+    logger.info(f"Generated UUID: {meme_uuid}")
+    
     # Initialize generator with the meme template
     image_path = "setup/imgflip_data/templates/img/Aaaaand-Its-Gone.jpg"
     generator = MemeGenerator(image_path)
@@ -65,10 +80,21 @@ def main():
     generator.render_outlined_text(top_text, (x, top_y), (text_width, text_height))
     generator.render_outlined_text(bottom_text, (x, bottom_y), (text_width, text_height))
     
-    # Save the result
+    # Save the result locally
     output_path = "tests/meme_output.jpg"
     generator.save(output_path)
-    print(f"Meme saved to {output_path}")
+    logger.info(f"Meme saved locally to {output_path}")
+    
+    # Upload to Digital Ocean Spaces
+    try:
+        uploader = S3Uploader()
+        cdn_url = uploader.upload_image(generator.base_image, meme_uuid)
+        if cdn_url:
+            logger.info(f"Meme uploaded to CDN: {cdn_url}")
+        else:
+            logger.error("Failed to upload meme to CDN")
+    except Exception as e:
+        logger.error(f"Error uploading to CDN: {str(e)}")
 
 if __name__ == "__main__":
     main()
