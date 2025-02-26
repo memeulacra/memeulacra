@@ -59,13 +59,13 @@ export default function ImageStudio() {
                   onClick={() => setSelectedImage(meme.url)}
                 >
                   <div className="relative w-full h-full">
-                    <Image
-                      src={meme.url || '/images/meme-placeholder.png'}
+                    {meme.url && (<Image
+                      src={meme.url}
                       alt={`Generated Image ${index + 1}`}
                       layout="fill"
                       objectFit="cover"
                       className="rounded-lg"
-                    />
+                    />)}
                     {isGenerating && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
                         <Loader className="h-8 w-8 animate-spin text-white" />
@@ -101,14 +101,6 @@ export default function ImageStudio() {
           />
         </div>
       </div>
-
-      {selectedImage && (
-        <ImageModal
-          src={selectedImage || '/images/meme-placeholder.png'}
-          alt="Full-size generated image"
-          onClose={() => setSelectedImage(null)}
-        />
-      )}
     </div>
   )
 }

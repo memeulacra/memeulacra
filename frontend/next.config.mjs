@@ -9,6 +9,12 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'i.imgflip.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'picsum.photos',
         port: '',
         pathname: '/**',

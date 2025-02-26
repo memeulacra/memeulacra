@@ -30,7 +30,7 @@ export function useMemeGeneration() {
         .fill(null)
         .map(() => ({
           id: `placeholder-${Math.random()}`,
-          url: '/images/meme-placeholder.svg', // Make sure this file exists
+          url: '',
           status: 'pending'
         }))
 

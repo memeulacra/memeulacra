@@ -26,9 +26,9 @@ export async function middleware(request: NextRequest) {
     // Generate canonical URL
     const hostname = request.headers.get('host') || ''
     const protocol = request.nextUrl.protocol
-    const canonicalUrl = `${protocol}//memeulacra.supertech.ai${pathname}`
+    const canonicalUrl = `${protocol}//memeularca.com${pathname}`
 
-    if (hostname === 'www.memeulacra.supertech.ai') {
+    if (hostname === 'www.memeulacra.com') {
       console.log('REDIRECTING TO:', canonicalUrl)
       const destinationUrl = `${canonicalUrl}`
       return NextResponse.redirect(destinationUrl, 301)

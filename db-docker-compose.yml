@@ -14,6 +14,40 @@ services:
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
       - ./postgres/meme_templates_202502251132.sql:/docker-entrypoint-initdb.d/02-data.sql
       #- ./postgres/users_202502251134.sql:/docker-entrypoint-initdb.d/03-data.sql
+      
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api:/app
+    environment:
+      POSTGRES_DB: memedb
+      POSTGRES_USER: memeuser
+      POSTGRES_PASSWORD: memepass
+      POSTGRES_HOST: db
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "3005:3005"
+  #   environment:
+  #     DATABASE_URL: postgres://memeuser:memepass@db:5432/memedb
+  #     NEXT_PUBLIC_ONCHAINKIT_API_KEY: 6IXH4m79EVAdWozcD7k0jznfCXVyQCZl
+  #     NODE_ENV: production
+  #     DEBUG: true
+  #     PORT: 3005
+  #   depends_on:
+  #     - db
 
 volumes:
   postgres_data:
