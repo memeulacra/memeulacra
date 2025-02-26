@@ -12,7 +12,11 @@ class TextOverlay:
         Args:
             image_url: Relative URL path from database (e.g., 'memes/Aaaaand-Its-Gone.jpg')
         """
-        full_url = f"{CDN_BASE_URL}/{image_url}"
+        # Ensure we don't have double slashes in the URL
+        if image_url.startswith('/'):
+            full_url = f"{CDN_BASE_URL}{image_url}"
+        else:
+            full_url = f"{CDN_BASE_URL}/{image_url}"
         response = requests.get(full_url)
         response.raise_for_status()
         self.base_image = Image.open(BytesIO(response.content))

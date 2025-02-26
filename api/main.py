@@ -44,8 +44,8 @@ class MemeTemplate(BaseModel):
     popularity_score: float
 
 # This function wraps our CPU-bound operations for the thread pool
-def run_in_threadpool(func, *args, **kwargs):
-    return func(*args, **kwargs)
+async def run_in_threadpool(func, *args, **kwargs):
+    return await func(*args, **kwargs)
 
 @app.get("/")
 async def root():
@@ -156,16 +156,8 @@ async def generate_meme_batch(request: BatchMemeRequest):
         # Log the start of the operation
         logger.info(f"Starting batch meme generation for {len(request.uuids)} memes")
         
-        # Run the CPU-bound AI task in a separate thread to keep FastAPI's event loop responsive
-        # This allows multiple requests to be processed concurrently
-        loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(
-            thread_pool,
-            run_in_threadpool,
-            generate_memes_for_uuids,
-            request.context,
-            request.uuids
-        )
+        # Directly await the async function
+        results = await generate_memes_for_uuids(request.context, request.uuids)
         
         logger.info(f"Completed batch meme generation for {len(request.uuids)} memes")
         return {"memes": results}
@@ -187,4 +179,3 @@ async def health_check():
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
-    

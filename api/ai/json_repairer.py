@@ -1,8 +1,13 @@
 import json
 import requests
 import os
+import anthropic
 from typing import Dict, Any
+from ai.rate_limiter import RateLimiter
+import logging
 
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class JsonRepairer:
     def __init__(self, json_schema: Dict[str, Any]):
@@ -31,44 +36,36 @@ Rules:
         except json.JSONDecodeError:
             return False
 
-    def repair_json(self, broken_json: str) -> str:
+    async def repair_json(self, broken_json: str) -> str:
         """
-        Repairs broken JSON using the Venice API.
+        Repairs broken JSON using the Claude API.
         Returns the fixed JSON string.
         """
-        # Prepare the prompt for Venice API
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": f"Fix this JSON to match the required schema exactly:\n\n{broken_json}"}
-        ]
-        
-        # Venice API configuration
-        url = "https://api.venice.ai/api/v1/chat/completions"
-        payload = {
-            "model": "llama-3.3-70b",
-            "messages": messages,
-            "venice_parameters": {
-                "enable_web_search": 'off',
-                "include_venice_system_prompt": False,
-            },
-            "temperature": 0.1,  # Lower temperature for more consistent output
-            "max_tokens": 1000
-        }
-        headers = {
-            "Authorization": f"Bearer {os.getenv('VENICE_API_TOKEN')}",
-            "Content-Type": "application/json"
-        }
+        ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+        if not ANTHROPIC_API_KEY:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
 
+        # Initialize Anthropic client
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY, base_url=None)
+        
         try:
-            response = requests.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            fixed_json = response.json()["choices"][0]["message"]["content"].strip()
+            # Use the RateLimiter to make the request
+            response = await RateLimiter.make_anthropic_request(
+                logger=logger,
+                client=client,
+                system_prompt=self.system_prompt,
+                user_prompt=f"Fix this JSON to match the required schema exactly:\n\n{broken_json}",
+                max_tokens=1000,
+                temperature=0.1  # Lower temperature for more consistent output
+            )
+            
+            fixed_json = response.content[0].text.strip()
 
             # Validate the response
             if self._is_valid_json(fixed_json):
                 return fixed_json
             else:
-                raise ValueError("Venice API returned invalid JSON")
+                raise ValueError("Claude API returned invalid JSON")
 
         except Exception as e:
             raise ValueError(f"Failed to repair JSON: {str(e)}")
