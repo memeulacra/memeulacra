@@ -47,7 +47,7 @@ async def generate_meme_goals(context: str):
             logger=logger,
             client=client,
             system_prompt=GOAL_GEN_SYSTEM_PROMPT,
-            user_prompt=format_goal_gen_user_prompt(context),
+            user_prompt=format_goal_gen_user_prompt(context, num_goals=2),
             max_tokens=700,
             temperature=0.7
         )
@@ -148,7 +148,7 @@ async def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
             logger=logger,
             client=client,
             system_prompt=GENERATE_MEME_TEXT_SYSTEM_PROMPT,
-            user_prompt=format_generate_meme_text_user_prompt(template, goal, context, examples),
+            user_prompt=format_generate_meme_text_user_prompt(template, goal, context, examples, num_variations=1),
             max_tokens=700,
             temperature=0.8
         )
@@ -170,7 +170,7 @@ async def generate_meme_texts(template: dict, goal: dict, context: str) -> dict:
         logger.error(f"Error generating meme texts: {str(e)}")
         raise
 
-def find_similar_templates(goal: dict, top_k: int = 3) -> list:
+def find_similar_templates(goal: dict, top_k: int = 2) -> list:
     """Find similar meme templates using vector similarity search"""
     try:
         # Get embedding for the goal
@@ -390,23 +390,33 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
                 # Create text overlay
                 try:
                     # Initialize text overlay with template image
+                    logger.info(f"Creating text overlay for template image: {template['image_url']}")
                     overlay = TextOverlay(template["image_url"])
                     
                     # Add text to the image
                     # For simplicity, we'll use the first two text boxes as top and bottom text
                     top_text = meme["text_boxes"][0] or ""
                     bottom_text = meme["text_boxes"][1] or ""
+                    logger.info(f"Adding text to meme: top='{top_text}', bottom='{bottom_text}'")
                     overlay.add_meme_text(top_text, bottom_text)
                     
                     # Upload to Digital Ocean Spaces using the UUID as filename
+                    logger.info(f"Uploading meme image for UUID {meme['uuid']}")
                     cdn_url = s3_uploader.upload_image(overlay.get_image(), meme["uuid"])
                     
-                    # Update meme with CDN URL
-                    meme["cdn_url"] = cdn_url
-                    logger.info(f"Created meme image and uploaded to {cdn_url}")
+                    if cdn_url:
+                        # Update meme with CDN URL
+                        meme["cdn_url"] = cdn_url
+                        logger.info(f"Created meme image and uploaded to {cdn_url}")
+                    else:
+                        # If upload failed, set cdn_url to None and log error
+                        meme["cdn_url"] = None
+                        logger.error(f"Failed to upload meme image for UUID {meme['uuid']}")
                     
                 except Exception as e:
                     logger.error(f"Error creating meme image: {str(e)}")
+                    logger.error(f"Template: {template}")
+                    logger.error(f"Meme data: {meme}")
                     meme["cdn_url"] = None
             
         # Update database with generated memes and CDN URLs
@@ -482,9 +492,12 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
 if __name__ == "__main__":
     import asyncio
     
+    # Test configuration
+    NUM_TEST_MEMES = 4  # Number of memes to generate in the test
+    
     # Test the batch generation
     TEST_CONTEXT = "Insecure people criticize when youre doing things that they dont"
-    TEST_UUIDS = ["test-uuid-1", "test-uuid-2"]  # Replace with real UUIDs for testing
+    TEST_UUIDS = [f"test-uuid-{i+1}" for i in range(NUM_TEST_MEMES)]  # Generate test UUIDs
     
     async def main():
         try:

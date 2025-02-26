@@ -17,9 +17,23 @@ class TextOverlay:
             full_url = f"{CDN_BASE_URL}{image_url}"
         else:
             full_url = f"{CDN_BASE_URL}/{image_url}"
-        response = requests.get(full_url)
-        response.raise_for_status()
-        self.base_image = Image.open(BytesIO(response.content))
+        
+        # Add timeouts to prevent hanging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Attempting to fetch image from: {full_url}")
+        
+        try:
+            # Increase timeouts to give more time for connection
+            logger.info("Fetching image with timeout=(15, 30)")
+            response = requests.get(full_url, timeout=(15, 30))  # 15s connect, 30s read
+            response.raise_for_status()
+            self.base_image = Image.open(BytesIO(response.content))
+            logger.info(f"Successfully fetched image with dimensions: {self.base_image.size}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch image from {full_url}: {str(e)}")
+            raise ValueError(f"Failed to fetch image from {full_url}: {str(e)}")
+            
         self.draw = ImageDraw.Draw(self.base_image)
         self.width, self.height = self.base_image.size
         
