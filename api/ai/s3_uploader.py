@@ -22,11 +22,17 @@ class S3Uploader:
         if not all([self.access_key, self.secret_key]):
             raise ValueError("Digital Ocean Spaces credentials not configured")
         
+        # Configure boto3 client with timeouts
         self.s3_client = boto3.client(
             's3',
             endpoint_url=self.endpoint_url,
             aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key
+            aws_secret_access_key=self.secret_key,
+            config=boto3.session.Config(
+                connect_timeout=10,  # 10 seconds connection timeout
+                read_timeout=30,     # 30 seconds read timeout
+                retries={'max_attempts': 3}
+            )
         )
     
     def upload_image(self, image, uuid_str):
