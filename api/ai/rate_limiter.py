@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 import asyncio
 import logging
+import os
 
 
 @dataclass
@@ -145,9 +146,12 @@ class RateLimiter:
                 }
             ]
 
+        # Get model from environment variable or use default
+        model = os.getenv("CLAUDE_MODEL", "claude-3-5-haiku-20241022")
+        
         # Use create_raw to get access to headers
         raw_response = await client.messages.with_raw_response.create(
-            model="claude-3-7-sonnet-20250219",
+            model=model,
             max_tokens=max_tokens,
             temperature=temperature,
             system=system_prompt,
