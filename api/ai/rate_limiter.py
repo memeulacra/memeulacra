@@ -23,7 +23,7 @@ class RateLimitInfo:
         """Create RateLimitInfo from API response headers"""
         now = datetime.now(timezone.utc)
         future = now + timedelta(seconds=60)  # Default to 60 seconds in the future
-        
+
         def parse_date(date_str):
             if not date_str:
                 return future
@@ -31,7 +31,7 @@ class RateLimitInfo:
                 return datetime.fromisoformat(date_str)
             except ValueError:
                 return future
-        
+
         return cls(
             requests_remaining=int(
                 headers.get("anthropic-ratelimit-requests-remaining", 0)

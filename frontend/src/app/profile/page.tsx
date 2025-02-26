@@ -30,7 +30,7 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [isMounted, setIsMounted] = useState(false)\
+  const [isMounted, setIsMounted] = useState(false)
   const { toast } = useToast()
   const { address, isConnected } = useAccount()
   const {

@@ -1,75 +1,162 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import {
+  Card,
+  CardContent,
+  CardFooter
+} from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Slider } from '@/components/ui/slider'
-
-interface QuickAccessToolsProps {
-  onPromptSubmit: (prompt: string, modelSettings: ModelSettings) => void
-}
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
+import {
+  Sparkles,
+  Wand2,
+  Loader2
+} from 'lucide-react'
 
 interface ModelSettings {
   numberOfOutputs: 1 | 2 | 3 | 4
 }
 
-export default function QuickAccessTools({ onPromptSubmit }: QuickAccessToolsProps) {
-  const [prompt, setPrompt] = useState('')
-  const [numberOfOutputs, setNumberOfOutputs] = useState<number>(1)
+interface QuickAccessToolsProps {
+  onPromptSubmit: (prompt: string, modelSettings: ModelSettings) => void
+  isGenerating?: boolean
+}
 
-  const handlePromptSubmit = () => {
-    onPromptSubmit(prompt, { numberOfOutputs: numberOfOutputs as 1 | 2 | 3 | 4 })
+export default function QuickAccessTools({
+  onPromptSubmit,
+  isGenerating = false
+}: QuickAccessToolsProps) {
+  const [prompt, setPrompt] = useState('')
+  const [modelSettings, setModelSettings] = useState<ModelSettings>({
+    numberOfOutputs: 4
+  })
+
+  const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setPrompt(e.target.value)
   }
 
-  const handleNumberOfOutputsChange = (value: number[]) => {
-    setNumberOfOutputs(value[0])
+  const handleNumberOfOutputsChange = (value: string) => {
+    setModelSettings({
+      ...modelSettings,
+      numberOfOutputs: parseInt(value) as 1 | 2 | 3 | 4
+    })
+  }
+
+  const handleGenerate = () => {
+    if (!prompt.trim()) return
+    onPromptSubmit(prompt, modelSettings)
+  }
+
+  // Example prompts with short names and full content
+  const promptExamples = [
+    {
+      shortName: 'Cyberpunk Dog',
+      fullText: 'A dog riding a skateboard through a cyberpunk city'
+    },
+    {
+      shortName: 'Crypto Warrior',
+      fullText: 'An ancient meme coin warrior defending crypto castle'
+    },
+    {
+      shortName: 'Moon Discovery',
+      fullText: 'Astronaut discovering a meme coin on the moon'
+    },
+    {
+      shortName: 'Wall St Panic',
+      fullText: 'Wall Street banker panicking as meme coins take over'
+    }
+  ]
+
+  const handlePromptExample = (example: string) => {
+    setPrompt(example)
   }
 
   return (
-    <motion.div
-      initial={{ y: 20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30, delay: 0.2 }}
-      className="w-full"
-    >
-      <div className="bg-gray-800 backdrop-blur-lg rounded-lg p-4 shadow-lg border border-transparent animate-gradient-glow">
+    <Card className="border border-transparent animate-gradient-glow">
+      <CardContent className="p-4">
         <div className="space-y-4">
-          <Textarea
-            placeholder="Describe your meme coin art idea..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="w-full !bg-gray-700 !bg-opacity-50 text-white placeholder-gray-400 border-gray-600"
-            rows={4}
-          />
-          <div className="flex items-center gap-8">
-            <div className="flex-1 space-y-2">
-              <div className="flex justify-between items-center">
-                <Label htmlFor="number-of-outputs" className="text-sm text-gray-300">
-                  Number of Outputs
-                </Label>
-                <span className="text-sm text-gray-400">{numberOfOutputs}</span>
-              </div>
-              <Slider
-                id="number-of-outputs"
-                min={1}
-                max={4}
-                step={1}
-                value={[numberOfOutputs]}
-                onValueChange={handleNumberOfOutputsChange}
-                className="w-full [&_[role=slider]]:bg-purple-600 [&_.relative]:bg-gradient-to-r [&_.relative]:from-purple-600/25 [&_.relative]:to-pink-600/25"
-              />
+          <div>
+            <div className="text-sm text-gray-400 mb-2 flex justify-between">
+              <span>Describe your meme idea</span>
+              <span>{prompt.length}/500</span>
             </div>
-            <Button
-              onClick={handlePromptSubmit}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-            >
-              Generate
-            </Button>
+            <div className="flex gap-2">
+              <Textarea
+                placeholder="Describe the meme you want to create..."
+                className="min-h-[80px] bg-gray-700/50 flex-grow"
+                maxLength={500}
+                value={prompt}
+                onChange={handlePromptChange}
+              />
+              <Button
+                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 min-h-[100px]"
+                onClick={handleGenerate}
+                disabled={!prompt.trim() || isGenerating}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">Generating...</span>
+                    <span className="sm:hidden">...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    <span className="hidden sm:inline">Generate Meme</span>
+                    <span className="sm:hidden">Generate</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
+
+          {/* <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-sm text-gray-400 mb-2">Number of outputs</div>
+              <Select
+                value={String(modelSettings.numberOfOutputs)}
+                onValueChange={handleNumberOfOutputsChange}
+                disabled={isGenerating}
+              >
+                <SelectTrigger className="bg-gray-700/50">
+                  <SelectValue placeholder="Select number" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1</SelectItem>
+                  <SelectItem value="2">2</SelectItem>
+                  <SelectItem value="3">3</SelectItem>
+                  <SelectItem value="4">4</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div> */}
         </div>
-      </div>
-    </motion.div>
+      </CardContent>
+
+      <CardFooter className="flex flex-col gap-4 p-4 pt-0">
+        <div className="text-sm text-gray-400 mb-0">Try an example:</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 w-full">
+          {promptExamples.map((example, i) => (
+            <Button
+              key={i}
+              variant="outline"
+              className="h-auto py-2 px-3 text-xs text-left justify-start border-gray-700 hover:bg-gray-700/50 truncate"
+              onClick={() => handlePromptExample(example.fullText)}
+              disabled={isGenerating}
+            >
+              {example.shortName}
+            </Button>
+          ))}
+        </div>
+      </CardFooter>
+    </Card>
   )
 }
