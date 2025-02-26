@@ -9,6 +9,7 @@ from psycopg2.extras import RealDictCursor
 from pgvector.psycopg2 import register_vector
 import numpy as np
 import torch
+from ai.text_overlay import TextOverlay
 from transformers import AutoTokenizer, AutoModel
 from dotenv import load_dotenv
 from ai.prompts import (
@@ -304,6 +305,7 @@ def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]:
     Generate memes for a list of UUIDs using the given context.
     Returns a list of dicts containing UUID and text boxes.
     """
+
     try:
         # Connect to database
         conn = psycopg2.connect(
