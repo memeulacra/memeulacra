@@ -89,7 +89,7 @@ class DigitalOceanAPI:
 def main():
     parser = argparse.ArgumentParser(description="Create a snapshot of a Digital Ocean droplet")
     parser.add_argument("--api-token", required=True, help="Digital Ocean API token")
-    parser.add_argument("--active-tag", default="memeulacra-active", help="Tag for the active droplet")
+    parser.add_argument("--active-tag", default="memeulacra", help="Tag for the active droplet")
     parser.add_argument("--snapshot-name", default=None, help="Name for the snapshot (default: memeulacra-YYYYMMDD)")
     parser.add_argument("--keep-snapshots", type=int, default=3, help="Number of snapshots to keep")
 
