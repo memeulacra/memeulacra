@@ -438,6 +438,7 @@ def find_similar_templates(goal: dict, top_k: int = 2, timing: TimingStats = Non
                     description,
                     image_url,
                     text_box_count,
+                    text_box_coordinates,
                     example_texts,
                     1 - (embedding <-> %s) as similarity
                 FROM meme_templates
@@ -546,12 +547,53 @@ async def process_meme_image(template_image_url: str, meme: dict, timing: Timing
             timing.start(f"text_overlay_{meme['uuid']}")
         overlay = TextOverlay(template_image_url)
         
+        # Check if we have text box coordinates for this template
+        template_id = meme.get("template_id")
+        text_box_coordinates = None
+        
+        if template_id:
+            try:
+                # Connect to database to get text box coordinates
+                conn = psycopg2.connect(
+                    dbname=os.getenv("POSTGRES_DB"),
+                    user=os.getenv("POSTGRES_USER"),
+                    password=os.getenv("POSTGRES_PASSWORD"),
+                    host=os.getenv("POSTGRES_HOST", "db"),
+                    port=os.getenv("POSTGRES_PORT", "5432")
+                )
+                
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT text_box_coordinates
+                        FROM meme_templates
+                        WHERE id = %s
+                    """, (template_id,))
+                    
+                    result = cur.fetchone()
+                    if result and result.get('text_box_coordinates'):
+                        text_box_coordinates = result['text_box_coordinates']
+                        logger.info(f"Found text box coordinates for template {template_id}")
+                
+                conn.close()
+            except Exception as e:
+                logger.error(f"Error fetching text box coordinates: {str(e)}")
+                # Continue without coordinates if there's an error
+        
         # Add text to the image
-        # For simplicity, we'll use the first two text boxes as top and bottom text
-        top_text = meme["text_boxes"][0] or ""
-        bottom_text = meme["text_boxes"][1] or ""
-        logger.info(f"Adding text to meme: top='{top_text}', bottom='{bottom_text}'")
-        overlay.add_meme_text(top_text, bottom_text)
+        if text_box_coordinates:
+            # TODO: Implement a more advanced text overlay method that uses coordinates
+            # For now, we'll still use the first two text boxes as top and bottom text
+            logger.info("Using text box coordinates is not yet implemented, falling back to top/bottom text")
+            top_text = meme["text_boxes"][0] or ""
+            bottom_text = meme["text_boxes"][1] or ""
+            logger.info(f"Adding text to meme: top='{top_text}', bottom='{bottom_text}'")
+            overlay.add_meme_text(top_text, bottom_text)
+        else:
+            # For simplicity, we'll use the first two text boxes as top and bottom text
+            top_text = meme["text_boxes"][0] or ""
+            bottom_text = meme["text_boxes"][1] or ""
+            logger.info(f"Adding text to meme: top='{top_text}', bottom='{bottom_text}'")
+            overlay.add_meme_text(top_text, bottom_text)
         
         if timing:
             timing.end(f"text_overlay_{meme['uuid']}")
@@ -656,6 +698,23 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
         for goal in goals["meme_goals"]:
             templates = find_similar_templates(goal, timing=timing)
             logger.info(f"Found similar templates for goal '{goal.get('goal', '')}': {json.dumps(templates, indent=2)}")
+            
+            # Process text_box_coordinates for each template
+            for template in templates:
+                if template.get('text_box_coordinates'):
+                    try:
+                        # If text_box_coordinates is a string, parse it
+                        if isinstance(template['text_box_coordinates'], str):
+                            template['text_box_coordinates'] = json.loads(template['text_box_coordinates'])
+                        # If it's a list with a string as the first element, parse that string
+                        elif isinstance(template['text_box_coordinates'], list) and len(template['text_box_coordinates']) > 0:
+                            if isinstance(template['text_box_coordinates'][0], str):
+                                template['text_box_coordinates'] = json.loads(template['text_box_coordinates'][0])
+                        
+                        logger.info(f"Processed text_box_coordinates for template {template.get('name', 'unknown')}")
+                    except Exception as e:
+                        logger.error(f"Error processing text_box_coordinates for template {template.get('name', 'unknown')}: {str(e)}")
+                        template['text_box_coordinates'] = []
             
             # Generate text for all templates in parallel
             template_results = await batch_generate_texts(templates, goal, context, timing)

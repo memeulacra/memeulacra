@@ -61,20 +61,27 @@ def format_choose_meme_template_choice_user_prompt(goal: dict):
 GENERATE_MEME_TEXT_SYSTEM_PROMPT = """You are an expert meme creator who excels at crafting witty, impactful text for meme templates. Your role is to generate text variations that perfectly match both the meme template's style, the intended goal, and the original context.
 
 For each template, you should:
-1. Consider the template's format (1 or 2 text boxes)
-2. Ensure text matches the template's typical usage pattern
-3. Create text that achieves the goal's intended emotion and impact
-4. Keep text concise and punchy - memes work best with brief, impactful text
-5. Ensure the text relates back to the original context while achieving the goal
-6. Study the provided successful examples to understand what resonates with users
-7. Learn from less successful examples to avoid common pitfalls
-8. Generate exactly 3 distinct variations that incorporate these insights
+1. Consider the template's format (number of text boxes as indicated by text_box_count)
+2. If text box coordinates and labels are provided, generate text that fits each labeled box
+3. Ensure text matches the template's typical usage pattern
+4. Create text that achieves the goal's intended emotion and impact
+5. Keep text concise and punchy - memes work best with brief, impactful text
+6. Ensure the text relates back to the original context while achieving the goal
+7. Study the provided successful examples to understand what resonates with users
+8. Learn from less successful examples to avoid common pitfalls
+9. Generate exactly 3 distinct variations that incorporate these insights
 
 When analyzing examples:
 - Look for patterns in successful memes' text structure and tone
 - Note how successful memes balance humor with message delivery
 - Identify what makes certain memes less effective
 - Consider how text length and complexity affects engagement
+
+When text box labels are provided:
+- Pay close attention to the labels that describe what each text box represents
+- Generate text that is appropriate for the described element (e.g., "boyfriend in the center" vs "girlfriend being ignored")
+- Ensure the text for each box makes sense in relation to the other boxes
+- Keep the narrative coherent across all text boxes
 
 Your outputs must follow the meme's established format while delivering both the goal's message and maintaining relevance to the original context, informed by real engagement data from similar memes."""
 
@@ -91,20 +98,30 @@ def format_generate_meme_text_user_prompt(template: dict, goal: dict, context: s
             text_boxes = [ex.get(f'text_box_{i}') for i in range(1, 6) if ex.get(f'text_box_{i}')]
             examples_section += f"- Thumbs down: {ex.get('thumbs_down', 0)}\n  Text: {' | '.join(text_boxes)}\n"
 
+    # Add text box coordinates information if available
+    text_box_info = ""
+    if template.get('text_box_coordinates') and template.get('text_box_count', 0) > 0:
+        text_box_info = "\nText Box Information:\n"
+        for box in template['text_box_coordinates']:
+            text_box_info += f"- Box {box.get('id')}: {box.get('label', 'No label')}\n"
+
     return f"""Given this meme template, goal, and original context:
 
 Template: {json.dumps(template, indent=2)}
 Goal: {json.dumps(goal, indent=2)}
-Original Context: {context}{examples_section}
+Original Context: {context}{examples_section}{text_box_info}
 
-Generate exactly {num_variations} text variation(s) for this meme that relate to both the goal and the original context. Use insights from the successful examples while avoiding patterns from less successful ones. Format your response as a JSON object with no additional text:
+Generate exactly {num_variations} text variation(s) for this meme that relate to both the goal and the original context. Use insights from the successful examples while avoiding patterns from less successful ones.
+
+{"For each text box, generate text that fits the description in the label." if text_box_info else ""}
+
+Format your response as a JSON object with no additional text:
 
 {{
     "text_choices": [
         {{
-            "box_count": number of text boxes (1 or 2),
-            "text1": "top text if box_count=2 or only text if box_count=1",
-            "text2": "bottom text (only if box_count=2)"
+            "box_count": {template.get('text_box_count', 2)},
+            {"".join([f'"text{box.get("id")}": "text for {box.get("label", f"box {box.get("id")}")}",' for box in template.get('text_box_coordinates', [])]).rstrip(',') if template.get('text_box_coordinates') else '"text1": "top text if box_count=2 or only text if box_count=1",\n            "text2": "bottom text (only if box_count=2)"'}
         }}
     ]
 }}"""
