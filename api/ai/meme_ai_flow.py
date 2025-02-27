@@ -549,51 +549,116 @@ async def process_meme_image(template_image_url: str, meme: dict, timing: Timing
         
         # Check if we have text box coordinates for this template
         template_id = meme.get("template_id")
-        text_box_coordinates = None
-        
-        if template_id:
-            try:
-                # Connect to database to get text box coordinates
-                conn = psycopg2.connect(
-                    dbname=os.getenv("POSTGRES_DB"),
-                    user=os.getenv("POSTGRES_USER"),
-                    password=os.getenv("POSTGRES_PASSWORD"),
-                    host=os.getenv("POSTGRES_HOST", "db"),
-                    port=os.getenv("POSTGRES_PORT", "5432")
-                )
+        if not template_id:
+            error_msg = "No template_id provided for meme"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        # Connect to database to get text box coordinates
+        try:
+            conn = psycopg2.connect(
+                dbname=os.getenv("POSTGRES_DB"),
+                user=os.getenv("POSTGRES_USER"),
+                password=os.getenv("POSTGRES_PASSWORD"),
+                host=os.getenv("POSTGRES_HOST", "db"),
+                port=os.getenv("POSTGRES_PORT", "5432")
+            )
+            
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT text_box_coordinates
+                    FROM meme_templates
+                    WHERE id = %s
+                """, (template_id,))
                 
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.execute("""
-                        SELECT text_box_coordinates
-                        FROM meme_templates
-                        WHERE id = %s
-                    """, (template_id,))
+                result = cur.fetchone()
+                if not result or not result.get('text_box_coordinates'):
+                    error_msg = f"No text box coordinates found in database for template {template_id}"
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
                     
-                    result = cur.fetchone()
-                    if result and result.get('text_box_coordinates'):
-                        text_box_coordinates = result['text_box_coordinates']
-                        logger.info(f"Found text box coordinates for template {template_id}")
+                text_box_coordinates = result['text_box_coordinates']
+                logger.info(f"Found text box coordinates for template {template_id}")
+            
+            conn.close()
+        except Exception as e:
+            error_msg = f"Error fetching text box coordinates from database: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        
+        # Parse text_box_coordinates if it's a string
+        if isinstance(text_box_coordinates, str):
+            try:
+                text_box_coordinates = json.loads(text_box_coordinates)
+                logger.info(f"Parsed text_box_coordinates from string")
+            except json.JSONDecodeError as e:
+                error_msg = f"Failed to parse text_box_coordinates JSON: {str(e)}"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+        
+        # Extract the coordinates and prepare the texts
+        coordinates = []
+        texts = []
+        
+        # Log the text boxes for debugging
+        logger.info(f"Text boxes: {meme['text_boxes']}")
+        
+        # Process each text box coordinate
+        for box in text_box_coordinates:
+            try:
+                box_id = None
+                box_coords = {}
                 
-                conn.close()
+                # Handle different formats of text_box_coordinates
+                if isinstance(box, dict):
+                    box_id = box.get('id')
+                    if box_id is not None:
+                        box_coords = {
+                            'x': float(box.get('x', 0)),
+                            'y': float(box.get('y', 0)),
+                            'width': float(box.get('width', 20)),
+                            'height': float(box.get('height', 10))
+                        }
+                elif isinstance(box, list) and len(box) >= 5:
+                    # Assuming format: [id, label, x, y, width, height]
+                    box_id = box[0]
+                    if box_id is not None:
+                        box_coords = {
+                            'x': float(box[2]) if len(box) > 2 else 0,
+                            'y': float(box[3]) if len(box) > 3 else 0,
+                            'width': float(box[4]) if len(box) > 4 else 20,
+                            'height': float(box[5]) if len(box) > 5 else 10
+                        }
+                
+                if box_id is not None:
+                    # Convert box_id to int and adjust for 0-based indexing
+                    box_index = int(box_id) - 1
+                    logger.info(f"Processing box with id {box_id}, index {box_index}")
+                    
+                    if 0 <= box_index < len(meme["text_boxes"]):
+                        # Get text from the appropriate index
+                        text = meme["text_boxes"][box_index]
+                        if text:  # Only add non-empty text
+                            logger.info(f"Adding text for box {box_id}: '{text}'")
+                            texts.append(text)
+                            coordinates.append(box_coords)
+                        else:
+                            logger.info(f"Skipping empty text for box {box_id}")
+                    else:
+                        logger.warning(f"Box index {box_index} out of range for text_boxes (length: {len(meme['text_boxes'])})")
             except Exception as e:
-                logger.error(f"Error fetching text box coordinates: {str(e)}")
-                # Continue without coordinates if there's an error
+                logger.error(f"Error processing text box coordinate: {str(e)}")
+                logger.error(f"Box: {box}")
+                # Continue processing other boxes
         
         # Add text to the image
-        if text_box_coordinates:
-            # TODO: Implement a more advanced text overlay method that uses coordinates
-            # For now, we'll still use the first two text boxes as top and bottom text
-            logger.info("Using text box coordinates is not yet implemented, falling back to top/bottom text")
-            top_text = meme["text_boxes"][0] or ""
-            bottom_text = meme["text_boxes"][1] or ""
-            logger.info(f"Adding text to meme: top='{top_text}', bottom='{bottom_text}'")
-            overlay.add_meme_text(top_text, bottom_text)
-        else:
-            # For simplicity, we'll use the first two text boxes as top and bottom text
-            top_text = meme["text_boxes"][0] or ""
-            bottom_text = meme["text_boxes"][1] or ""
-            logger.info(f"Adding text to meme: top='{top_text}', bottom='{bottom_text}'")
-            overlay.add_meme_text(top_text, bottom_text)
+        if not coordinates:
+            error_msg = "No valid text box coordinates found for template"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        logger.info(f"Adding {len(texts)} text boxes at specific coordinates")
+        overlay.add_text_at_coordinates(texts, coordinates)
         
         if timing:
             timing.end(f"text_overlay_{meme['uuid']}")
@@ -733,8 +798,11 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
                     # Convert text choice to array format
                     text_boxes = [None] * 7  # Initialize with 7 None values
                     for i in range(1, 8):
+                        # Check for both formats: text1, text2, etc. and text_1, text_2, etc.
                         if f"text{i}" in choice:
                             text_boxes[i-1] = choice[f"text{i}"]
+                        elif f"text_{i}" in choice:
+                            text_boxes[i-1] = choice[f"text_{i}"]
                     
                     try:
                         if "id" not in template:

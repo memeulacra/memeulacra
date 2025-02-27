@@ -12,8 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
-      - ./postgres/meme_templates_202502251132.sql:/docker-entrypoint-initdb.d/02-data.sql
-      #- ./postgres/users_202502251134.sql:/docker-entrypoint-initdb.d/03-data.sql
+      - ./postgres/meme_templates_202502271257.sql:/docker-entrypoint-initdb.d/02-data.sql
   
   meme_editor:
     build:

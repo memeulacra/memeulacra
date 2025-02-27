@@ -103,7 +103,45 @@ def format_generate_meme_text_user_prompt(template: dict, goal: dict, context: s
     if template.get('text_box_coordinates') and template.get('text_box_count', 0) > 0:
         text_box_info = "\nText Box Information:\n"
         for box in template['text_box_coordinates']:
-            text_box_info += f"- Box {box.get('id')}: {box.get('label', 'No label')}\n"
+            # Check if box is a dictionary (expected) or a list (needs handling)
+            if isinstance(box, dict):
+                # If it's a dictionary, use get() method
+                text_box_info += f"- Box {box.get('id')}: {box.get('label', 'No label')}\n"
+            elif isinstance(box, list):
+                # If it's a list, try to extract id and label from specific indices
+                # Assuming the list structure is [id, label, ...other data]
+                box_id = box[0] if len(box) > 0 else "unknown"
+                box_label = box[1] if len(box) > 1 else "No label"
+                text_box_info += f"- Box {box_id}: {box_label}\n"
+            else:
+                # For any other type, provide a generic entry
+                text_box_info += f"- Box: {str(box)}\n"
+    
+    # Pre-compute the text box JSON part to avoid nested f-strings
+    text_box_json = ""
+    if template.get('text_box_coordinates'):
+        text_parts = []
+        for box in template.get('text_box_coordinates', []):
+            # Handle different box types
+            if isinstance(box, dict):
+                # If it's a dictionary, use get() method
+                box_id = box.get("id")
+                label = box.get("label", "box " + str(box_id))
+            elif isinstance(box, list):
+                # If it's a list, try to extract id and label from specific indices
+                # Assuming the list structure is [id, label, ...other data]
+                box_id = box[0] if len(box) > 0 else "unknown"
+                box_label = box[1] if len(box) > 1 else "No label"
+                label = box_label
+            else:
+                # For any other type, provide generic values
+                box_id = "unknown"
+                label = "unknown box"
+                
+            text_parts.append(f'"text_{box_id}": "text for {label}"')
+        text_box_json = ", ".join(text_parts)
+    else:
+        text_box_json = '"text_1": "top text if box_count=2 or only text if box_count=1",\n            "text_2": "bottom text (only if box_count=2)"'
 
     return f"""Given this meme template, goal, and original context:
 
@@ -121,7 +159,7 @@ Format your response as a JSON object with no additional text:
     "text_choices": [
         {{
             "box_count": {template.get('text_box_count', 2)},
-            {"".join([f'"text{box.get("id")}": "text for {box.get("label", f"box {box.get("id")}")}",' for box in template.get('text_box_coordinates', [])]).rstrip(',') if template.get('text_box_coordinates') else '"text1": "top text if box_count=2 or only text if box_count=1",\n            "text2": "bottom text (only if box_count=2)"'}
+            {text_box_json}
         }}
     ]
 }}"""
