@@ -11,10 +11,10 @@ export function Providers(props: { children: ReactNode }) {
       chain={base} // add baseSepolia for testing
       config={{
         appearance: {
-          name: 'Your App Name',        // Displayed in modal header
-          logo: 'https://your-logo.com',// Displayed in modal header
-          mode: 'auto',                 // 'light' | 'dark' | 'auto'
-          theme: 'default',             // 'default' or custom theme
+          name: 'Memeulacra',
+          logo: 'https://your-logo.com',
+          mode: 'dark',
+          theme: 'default',
         },
         wallet: {
           display: 'modal',

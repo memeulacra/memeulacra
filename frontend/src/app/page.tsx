@@ -1,69 +1,15 @@
 'use client'
 
-import { useEffect } from 'react'
-
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useInView } from 'react-intersection-observer'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ImageModal } from '@/components/image-modal'
-import { Rocket, Sparkles, ChevronUp, ChevronDown, Link2, ThumbsUp, ThumbsDown } from 'lucide-react' // Add these imports
-
-interface ImageTile {
-  id: number
-  src: string
-  width: number
-  height: number
-  author: string
-  likes?: number
-  dislikes?: number
-}
-
-const generateMockImages = (startIndex: number, count: number): ImageTile[] => {
-  return Array.from({ length: count }, (_, i) => ({
-    id: startIndex + i,
-    src: `https://picsum.photos/seed/${startIndex + i}/800/600`,
-    width: Math.floor(Math.random() * 200) + 200,
-    height: Math.floor(Math.random() * 200) + 200,
-    author: `User${Math.floor(Math.random() * 1000)}`,
-  }))
-}
+import { Rocket, Sparkles, ChevronUp, ChevronDown } from 'lucide-react'
+import MemeFeed from '@/components/meme-feed'
 
 export default function Home() {
-  const [images, setImages] = useState<ImageTile[]>([])
-  const [page, setPage] = useState(1)
-  const [selectedImage, setSelectedImage] = useState<ImageTile | null>(null)
   const [showHero, setShowHero] = useState(true)
-  const { ref, inView } = useInView({
-    threshold: 0,
-  })
-
-  useEffect(() => {
-    if (inView) {
-      const newImages = generateMockImages(images.length, 10)
-      setImages((prevImages) => [...prevImages, ...newImages])
-      setPage((prevPage) => prevPage + 1)
-    }
-  }, [inView, images.length])
-
-  const handleCopyLink = (e: React.MouseEvent, imageId: number) => {
-    e.stopPropagation()
-    const url = `${window.location.origin}/image/${imageId}`
-    navigator.clipboard.writeText(url)
-    // Could add a toast notification here
-  }
-
-  const handleLike = (e: React.MouseEvent, imageId: number) => {
-    e.stopPropagation()
-    // Add like handling logic here
-  }
-
-  const handleDislike = (e: React.MouseEvent, imageId: number) => {
-    e.stopPropagation()
-    // Add dislike handling logic here
-  }
 
   return (
     <div>
@@ -143,7 +89,7 @@ export default function Home() {
                   }}
                 >
                   <Sparkles className="mr-2 h-5 w-5" />
-                  Explore Eth Denver Community Memes
+                  Explore Community Memes
                 </Button>
               </motion.div>
               <motion.div
@@ -152,86 +98,24 @@ export default function Home() {
                 transition={{ duration: 0.8, delay: 0.4 }}
                 className="mt-12 text-sm text-gray-400"
               >
-                <p>Already BUIDLing the memes of tomorrow - join the web3 revolution at ETHDenver 2025!</p>
+                <p>Already BUIDLing the memes of tomorrow - join the web3 revolution!</p>
               </motion.div>
             </div>
           </motion.section>
         )}
-      </AnimatePresence>  
+      </AnimatePresence>
+
       <section id="community" className={`px-4 py-12 bg-black/50 ${!showHero ? 'pt-20' : ''}`}>
-        <div className="max-w-7xl mx-auto">
+        <div className="p-8 mx-auto">
           <h2 className="text-3xl font-bold mb-2 text-center bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-500">
-                  Community Creations
+            Community Creations
           </h2>
           <p className="text-gray-400 mb-8 text-center">Check out the latest meme coin art from our community</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {images.map((image, index) => (
-              <motion.div
-                key={image.id}
-                className="relative aspect-square overflow-hidden rounded-lg shadow-lg cursor-pointer group"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: (index % 10) * 0.1 }}
-                onClick={() => setSelectedImage(image)}
-              >
-                <Image
-                  src={image.src || '/placeholder.svg'}
-                  alt={`Image ${image.id}`}
-                  layout="fill"
-                  objectFit="cover"
-                  className="transition-transform duration-300 group-hover:scale-110"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <div className="absolute bottom-0 left-0 right-0 p-4">
-                    <div className="flex justify-between items-center w-full">
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 bg-black/50 hover:bg-black/70 text-white"
-                          onClick={(e) => handleCopyLink(e, image.id)}
-                        >
-                          <Link2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 bg-black/50 hover:bg-black/70 text-white flex items-center space-x-1 hover:text-green-400"
-                          onClick={(e) => handleLike(e, image.id)}
-                        >
-                          <ThumbsUp className="h-4 w-4" />
-                          <span className="text-xs">{image.likes}</span>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 bg-black/50 hover:bg-black/70 text-white flex items-center space-x-1 hover:text-red-400"
-                          onClick={(e) => handleDislike(e, image.id)}
-                        >
-                          <ThumbsDown className="h-4 w-4" />
-                          <span className="text-xs">{image.dislikes}</span>
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="text-white text-sm mt-2">Created by {image.author}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-          <div ref={ref} className="h-10 mt-4" />
+
+          {/* Replace the old image grid with our new MemeFeed component */}
+          <MemeFeed initialSort="newest" />
         </div>
       </section>
-
-      {selectedImage && (
-        <ImageModal
-          src={selectedImage.src || '/placeholder.svg'}
-          alt={`Full-size image by ${selectedImage.author}`}
-          onClose={() => setSelectedImage(null)}
-        />
-      )}
     </div>
   )
 }
