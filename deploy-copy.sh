@@ -74,7 +74,7 @@ if [ -z "$TARGET_IP" ]; then
 fi
 
 # Add common excludes
-EXCLUDE_OPTS="$EXCLUDE_OPTS --exclude=.git --exclude=node_modules --exclude=.env --exclude=.DS_Store --exclude=__pycache__ --exclude=*.pyc --exclude=.next"
+EXCLUDE_OPTS="$EXCLUDE_OPTS --exclude=.git --exclude=node_modules --exclude=.env --exclude=.DS_Store --exclude=__pycache__ --exclude=*.pyc --exclude=.next --exclude=venv"
 
 # Make sure source directory ends with /
 if [[ ! "$SOURCE_DIR" =~ /$ ]]; then

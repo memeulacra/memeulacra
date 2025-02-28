@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import db from '@/db/client'
 import { verifySession } from '@/lib/session'
+import logger from '@/logger'
 
 export const runtime = 'nodejs' // Force Node.js runtime
 
@@ -146,10 +147,7 @@ export async function GET(req: Request) {
     query += `
       LIMIT $1 OFFSET $2
     `
-
-    console.log('Query params:', params)
-    console.log('Query:', query)
-
+    logger.debug('Executing db query')
     // Execute the query
     const result = await db.query(query, params)
 

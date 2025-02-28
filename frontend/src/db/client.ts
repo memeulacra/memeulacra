@@ -5,11 +5,11 @@ import { Pool } from 'pg'
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   // Optional SSL configuration for production environments (like Heroku)
-  ...(process.env.NODE_ENV === 'production' && {
-    ssl: {
-      rejectUnauthorized: false
-    }
-  })
+  // ...(process.env.NODE_ENV === 'production' && {
+  //   ssl: {
+  //     rejectUnauthorized: false
+  //   }
+  // })
 })
 
 // Test the connection

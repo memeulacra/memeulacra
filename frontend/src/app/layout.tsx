@@ -21,6 +21,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Memeulacra',
   description: 'The Future of Memes, Now.',
+
 }
 
 export default function RootLayout({
@@ -30,9 +31,26 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta name="apple-mobile-web-app-title" content="Memeulacra" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (typeof window !== 'undefined' && typeof crypto !== 'undefined' && !crypto.randomUUID) {
+                crypto.randomUUID = function() {
+                  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+                    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+                  );
+                };
+                console.log('Added crypto.randomUUID polyfill via head script');
+              }
+            `,
+          }}
+        />
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           <Providers>
             <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
