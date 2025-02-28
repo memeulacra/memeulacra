@@ -21,7 +21,7 @@ env_cdn_url = os.getenv('CDN_BASE_URL', 'https://memes.supertech.ai')
 logger.info(f"TextOverlay: Overriding CDN base URL from {env_cdn_url} to {CDN_BASE_URL}")
 
 # Constants for text rendering
-MIN_FONT_SIZE = 60
+MIN_FONT_SIZE = 500
 MAX_CHARS_PER_LINE = 30
 
 class TextOverlay:

@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus, Download, Trash2 } from "lucide-react"
+import { Plus, Download, Trash2, Layers } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/components/ui/use-toast"
 
@@ -34,6 +34,15 @@ export default function MemeEditor() {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [logMessages, setLogMessages] = useState<string[]>([])
   const [imageLoaded, setImageLoaded] = useState<boolean>(false)
+  const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(null)
+  const [imageDimensions, setImageDimensions] = useState<{
+    naturalWidth: number
+    naturalHeight: number
+    renderedWidth: number
+    renderedHeight: number
+    offsetX: number
+    offsetY: number
+  } | null>(null)
 
   // Add a logging function
   const log = (message: string) => {
@@ -41,9 +50,103 @@ export default function MemeEditor() {
     setLogMessages(prev => [...prev, `${new Date().toISOString()}: ${message}`])
   }
 
+  // Function to convert container coordinates to image coordinates
+  const containerToImageCoordinates = (box: Box): Box => {
+    if (!imageDimensions) return box
+
+    const { renderedWidth, renderedHeight, offsetX, offsetY } = imageDimensions
+    const containerWidth = containerRef.current?.clientWidth || 0
+    const containerHeight = containerRef.current?.clientHeight || 0
+
+    // Calculate what percentage of the container width/height the image takes up
+    const imageWidthPercent = (renderedWidth / containerWidth) * 100
+    const imageHeightPercent = (renderedHeight / containerHeight) * 100
+    
+    // Calculate the offsets as percentages of the container
+    const offsetXPercent = (offsetX / containerWidth) * 100
+    const offsetYPercent = (offsetY / containerHeight) * 100
+
+    // First, adjust for the offset to get coordinates relative to the image's top-left corner
+    const relativeX = box.x - offsetXPercent
+    const relativeY = box.y - offsetYPercent
+    
+    // Then scale to convert from container percentage to image percentage
+    // If the image takes up 50% of the container width, then 50% container width = 100% image width
+    const scaleX = 100 / imageWidthPercent
+    const scaleY = 100 / imageHeightPercent
+    
+    return {
+      ...box,
+      x: relativeX * scaleX,
+      y: relativeY * scaleY,
+      width: box.width * scaleX,
+      height: box.height * scaleY
+    }
+  }
+
+  // Function to convert image coordinates to container coordinates
+  const imageToContainerCoordinates = (box: Box): Box => {
+    if (!imageDimensions) return box
+
+    const { renderedWidth, renderedHeight, offsetX, offsetY } = imageDimensions
+    const containerWidth = containerRef.current?.clientWidth || 0
+    const containerHeight = containerRef.current?.clientHeight || 0
+
+    // Calculate what percentage of the container width/height the image takes up
+    const imageWidthPercent = (renderedWidth / containerWidth) * 100
+    const imageHeightPercent = (renderedHeight / containerHeight) * 100
+    
+    // Calculate the offsets as percentages of the container
+    const offsetXPercent = (offsetX / containerWidth) * 100
+    const offsetYPercent = (offsetY / containerHeight) * 100
+
+    // First, scale from image percentage to container percentage
+    const scaleX = imageWidthPercent / 100
+    const scaleY = imageHeightPercent / 100
+    
+    // Then add the offset to position correctly within the container
+    return {
+      ...box,
+      x: (box.x * scaleX) + offsetXPercent,
+      y: (box.y * scaleY) + offsetYPercent,
+      width: box.width * scaleX,
+      height: box.height * scaleY
+    }
+  }
+
+  // Function to update image dimensions when the image is loaded or resized
+  const updateImageDimensions = () => {
+    if (!containerRef.current) return
+    
+    const container = containerRef.current
+    const img = container.querySelector('img')
+    
+    if (!img) return
+    
+    const containerRect = container.getBoundingClientRect()
+    const imgRect = img.getBoundingClientRect()
+    
+    setImageDimensions({
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
+      renderedWidth: imgRect.width,
+      renderedHeight: imgRect.height,
+      offsetX: imgRect.left - containerRect.left,
+      offsetY: imgRect.top - containerRect.top
+    })
+    
+    log(`Image dimensions updated: natural=${img.naturalWidth}x${img.naturalHeight}, rendered=${imgRect.width}x${imgRect.height}, offset=(${imgRect.left - containerRect.left},${imgRect.top - containerRect.top})`)
+  }
+
   useEffect(() => {
     log("Component mounted, fetching meme templates")
     fetchMemeTemplates()
+    
+    // Add window resize listener to update image dimensions
+    window.addEventListener('resize', updateImageDimensions)
+    return () => {
+      window.removeEventListener('resize', updateImageDimensions)
+    }
   }, [])
 
   const fetchMemeTemplates = async () => {
@@ -79,6 +182,7 @@ export default function MemeEditor() {
     
     // Reset imageLoaded state when switching templates
     setImageLoaded(false)
+    setImageDimensions(null)
     
     try {
       // Fetch the latest data for this template to ensure we have the most up-to-date coordinates
@@ -240,15 +344,20 @@ export default function MemeEditor() {
 
     try {
       setIsLoading(true)
+      
+      // Convert container coordinates to image coordinates before saving
+      const imageCoordinates = boxes.map(box => containerToImageCoordinates(box))
+      
       log(`Saving coordinates for template ${selectedTemplate.id}`)
-      log(`Box data: ${JSON.stringify(boxes)}`)
+      log(`Original box data: ${JSON.stringify(boxes)}`)
+      log(`Transformed box data: ${JSON.stringify(imageCoordinates)}`)
       
       const response = await fetch(`/api/meme-templates/${selectedTemplate.id}/coordinates`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ coordinates: boxes }),
+        body: JSON.stringify({ coordinates: imageCoordinates }),
       })
 
       if (response.ok) {
@@ -323,6 +432,75 @@ export default function MemeEditor() {
     }
   }
 
+  const testRectangleOverlay = async () => {
+    if (!selectedTemplate || boxes.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please select a template and add at least one text box",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      log("Testing rectangle overlay");
+      
+      // Get the image URL (either proxy or direct)
+      const imageUrl = selectedTemplate.image_url;
+      
+      // Convert container coordinates to image coordinates before sending to API
+      const imageCoordinates = boxes.map(box => containerToImageCoordinates(box));
+      
+      // Prepare the request data
+      const requestData = {
+        image_url: imageUrl,
+        boxes_data: imageCoordinates
+      };
+      
+      log(`Sending overlay request with image URL: ${imageUrl}`);
+      log(`Original boxes data: ${JSON.stringify(boxes)}`);
+      log(`Transformed boxes data: ${JSON.stringify(imageCoordinates)}`);
+      
+      // Call the API
+      const response = await fetch("/api/overlay-rectangles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestData),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        log(`Received overlay image URL: ${data.image_url}`);
+        setOverlayImageUrl(data.image_url);
+        toast({
+          title: "Success",
+          description: "Rectangle overlay generated successfully",
+        });
+      } else {
+        const errorText = await response.text();
+        log(`Failed to generate rectangle overlay: ${response.status} ${errorText}`);
+        toast({
+          title: "Error",
+          description: "Failed to generate rectangle overlay",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      log(`Error generating rectangle overlay: ${error}`);
+      console.error("Error generating rectangle overlay:", error);
+      toast({
+        title: "Error",
+        description: "An error occurred while generating rectangle overlay",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Meme Box Editor</h1>
@@ -344,13 +522,20 @@ export default function MemeEditor() {
         <div className="mb-4">
           <p className="text-sm text-gray-500">Template ID: {selectedTemplate.id}</p>
           <p className="text-sm text-gray-500">Image URL: {selectedTemplate.image_url}</p>
+          {imageDimensions && (
+            <p className="text-sm text-gray-500">
+              Image dimensions: {imageDimensions.naturalWidth}x{imageDimensions.naturalHeight} (natural), 
+              {imageDimensions.renderedWidth}x{imageDimensions.renderedHeight} (rendered), 
+              offset: ({imageDimensions.offsetX}, {imageDimensions.offsetY})
+            </p>
+          )}
         </div>
       )}
       {selectedTemplate && (
         <div
           ref={containerRef}
           className="relative border border-gray-300 mb-4"
-          style={{ width: "100%", height: "500px" }}
+          style={{ width: "100%", height: "100%" }}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
@@ -362,6 +547,8 @@ export default function MemeEditor() {
             onLoad={() => {
               log(`Image loaded via proxy for: ${selectedTemplate.image_url}`)
               setImageLoaded(true)
+              // Update image dimensions after the image is loaded
+              setTimeout(updateImageDimensions, 100) // Small delay to ensure the image is fully rendered
             }}
             onError={(e) => {
               log(`Error loading image via proxy for: ${selectedTemplate.image_url}`)
@@ -371,11 +558,21 @@ export default function MemeEditor() {
                 if (selectedTemplate.image_url.startsWith('http')) {
                   log(`Falling back to direct URL: ${selectedTemplate.image_url}`)
                   imgElement.src = selectedTemplate.image_url
-      } else if (selectedTemplate.image_url.startsWith('/')) {
-        // Try direct CDN URL
-        const cdnUrl = `https://memulacra.nyc3.digitaloceanspaces.com${selectedTemplate.image_url}`
-        log(`Falling back to direct CDN URL: ${cdnUrl}`)
-        imgElement.src = cdnUrl
+                  // Update dimensions after fallback image is loaded
+                  imgElement.onload = () => {
+                    setImageLoaded(true)
+                    setTimeout(updateImageDimensions, 100)
+                  }
+                } else if (selectedTemplate.image_url.startsWith('/')) {
+                  // Try direct CDN URL
+                  const cdnUrl = `https://memulacra.nyc3.digitaloceanspaces.com${selectedTemplate.image_url}`
+                  log(`Falling back to direct CDN URL: ${cdnUrl}`)
+                  imgElement.src = cdnUrl
+                  // Update dimensions after fallback image is loaded
+                  imgElement.onload = () => {
+                    setImageLoaded(true)
+                    setTimeout(updateImageDimensions, 100)
+                  }
                 }
               }
             }}
@@ -418,17 +615,31 @@ export default function MemeEditor() {
       {imageLoaded && boxes.length > 0 && (
         <div className="mt-4 mb-4 border border-gray-200 rounded-md p-4">
           <h3 className="text-lg font-semibold mb-2">Text Box Labels</h3>
-          <div className="space-y-2">
+          <div className="space-y-4">
             {boxes.map((box) => (
-              <div key={`label-${box.id}`} className="flex items-center">
-                <span className="mr-2 font-medium">Text Box {box.id}:</span>
-                <input
-                  type="text"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
-                  placeholder={`Enter label for text box ${box.id}`}
-                  value={box.label || ''}
-                  onChange={(e) => updateBox(box.id, { label: e.target.value })}
-                />
+              <div key={`label-${box.id}`} className="flex flex-col">
+                <div className="flex items-center">
+                  <span className="mr-2 font-medium">Text Box {box.id}:</span>
+                  <input
+                    type="text"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder={`Enter label for text box ${box.id}`}
+                    value={box.label || ''}
+                    onChange={(e) => updateBox(box.id, { label: e.target.value })}
+                  />
+                </div>
+                <div className="text-xs text-gray-500 mt-1 ml-2">
+                  x1: {box.x.toFixed(2)}%, y1: {box.y.toFixed(2)}%, 
+                  x2: {(box.x + box.width).toFixed(2)}%, y2: {(box.y + box.height).toFixed(2)}%
+                </div>
+                {imageDimensions && (
+                  <div className="text-xs text-gray-500 mt-1 ml-2">
+                    Image coordinates: x1: {containerToImageCoordinates(box).x.toFixed(2)}%, 
+                    y1: {containerToImageCoordinates(box).y.toFixed(2)}%, 
+                    x2: {(containerToImageCoordinates(box).x + containerToImageCoordinates(box).width).toFixed(2)}%, 
+                    y2: {(containerToImageCoordinates(box).y + containerToImageCoordinates(box).height).toFixed(2)}%
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -436,9 +647,14 @@ export default function MemeEditor() {
       )}
 
       <div className="flex justify-between">
-        <Button onClick={addBox} disabled={isLoading}>
-          <Plus className="mr-2 h-4 w-4" /> Add Box
-        </Button>
+        <div className="flex space-x-2">
+          <Button onClick={addBox} disabled={isLoading}>
+            <Plus className="mr-2 h-4 w-4" /> Add Box
+          </Button>
+          <Button onClick={testRectangleOverlay} disabled={isLoading || !selectedTemplate || boxes.length === 0}>
+            <Layers className="mr-2 h-4 w-4" /> Test Rectangle Overlay
+          </Button>
+        </div>
         <div className="flex space-x-2">
           <Button onClick={saveBoxCoordinates} disabled={isLoading}>
             <Download className="mr-2 h-4 w-4" /> {isLoading ? "Saving..." : "Save Box Coordinates"}
@@ -448,6 +664,18 @@ export default function MemeEditor() {
           </Button>
         </div>
       </div>
+
+      {/* Rectangle Overlay Preview */}
+      {overlayImageUrl && (
+        <div className="mt-4 mb-4 border border-gray-200 rounded-md p-4">
+          <h3 className="text-lg font-semibold mb-2">Rectangle Overlay Preview</h3>
+          <img 
+            src={overlayImageUrl} 
+            alt="Rectangle Overlay" 
+            className="w-full object-contain max-h-[500px]" 
+          />
+        </div>
+      )}
 
       {/* Debug log display */}
       <div className="mt-8 border border-gray-200 rounded-md p-4">
