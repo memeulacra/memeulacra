@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "researcher": {
+      "command": "node",
+      "args": ["/Users/dustin/Documents/Cline/MCP/researcher-mcp/build/index.js"],
+      "env": {
+        "PERPLEXITY_API_KEY": "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"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

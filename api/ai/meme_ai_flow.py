@@ -438,6 +438,7 @@ def find_similar_templates(goal: dict, top_k: int = 2, timing: TimingStats = Non
                     description,
                     image_url,
                     text_box_count,
+                    text_box_coordinates,
                     example_texts,
                     1 - (embedding <-> %s) as similarity
                 FROM meme_templates
@@ -544,14 +545,201 @@ async def process_meme_image(template_image_url: str, meme: dict, timing: Timing
         logger.info(f"Creating text overlay for template image: {template_image_url}")
         if timing:
             timing.start(f"text_overlay_{meme['uuid']}")
-        overlay = TextOverlay(template_image_url)
+        # Enable debug boxes to visualize text areas
+        debug_boxes = os.getenv("DEBUG_TEXT_BOXES", "false").lower() == "true"
+        overlay = TextOverlay(template_image_url, debug_boxes=debug_boxes)
+        
+        # Check if we have text box coordinates for this template
+        template_id = meme.get("template_id")
+        if not template_id:
+            error_msg = "No template_id provided for meme"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        # Connect to database to get text box coordinates
+        try:
+            conn = psycopg2.connect(
+                dbname=os.getenv("POSTGRES_DB"),
+                user=os.getenv("POSTGRES_USER"),
+                password=os.getenv("POSTGRES_PASSWORD"),
+                host=os.getenv("POSTGRES_HOST", "db"),
+                port=os.getenv("POSTGRES_PORT", "5432")
+            )
+            
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT text_box_coordinates
+                    FROM meme_templates
+                    WHERE id = %s
+                """, (template_id,))
+                
+                result = cur.fetchone()
+                if not result or not result.get('text_box_coordinates'):
+                    error_msg = f"No text box coordinates found in database for template {template_id}"
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                    
+                text_box_coordinates = result['text_box_coordinates']
+                logger.info(f"Found text box coordinates for template {template_id}")
+            
+            conn.close()
+        except Exception as e:
+            error_msg = f"Error fetching text box coordinates from database: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        
+        # Parse text_box_coordinates
+        try:
+            # Handle the case where text_box_coordinates is a JSON object with a string value
+            if isinstance(text_box_coordinates, dict) and len(text_box_coordinates) == 1:
+                # Get the first (and only) value from the dictionary
+                first_key = next(iter(text_box_coordinates))
+                text_box_coordinates_str = text_box_coordinates[first_key]
+                
+                if isinstance(text_box_coordinates_str, str):
+                    logger.info(f"Found text_box_coordinates as a JSON object with string value")
+                    text_box_coordinates = json.loads(text_box_coordinates_str)
+            # Handle the case where text_box_coordinates is a string
+            elif isinstance(text_box_coordinates, str):
+                logger.info(f"Found text_box_coordinates as a string")
+                text_box_coordinates = json.loads(text_box_coordinates)
+            # Handle the case where text_box_coordinates is a list with a single string element
+            elif isinstance(text_box_coordinates, list) and len(text_box_coordinates) == 1:
+                if isinstance(text_box_coordinates[0], str):
+                    logger.info(f"Found text_box_coordinates as a list with a single string element")
+                    text_box_coordinates = json.loads(text_box_coordinates[0])
+                elif isinstance(text_box_coordinates[0], list):
+                    logger.info(f"Found text_box_coordinates as a list with a nested list")
+                    text_box_coordinates = text_box_coordinates[0]
+                
+            logger.info(f"Successfully parsed text_box_coordinates")
+            # Log the structure of text_box_coordinates for debugging
+            logger.info(f"Parsed text_box_coordinates structure: {type(text_box_coordinates)}")
+            logger.info(f"Parsed text_box_coordinates content: {json.dumps(text_box_coordinates, default=str)}")
+        except json.JSONDecodeError as e:
+            error_msg = f"Failed to parse text_box_coordinates JSON: {str(e)}"
+            logger.error(error_msg)
+            logger.error(f"Raw text_box_coordinates: {text_box_coordinates}")
+            raise ValueError(error_msg)
+        except Exception as e:
+            error_msg = f"Error processing text_box_coordinates: {str(e)}"
+            logger.error(error_msg)
+            logger.error(f"Raw text_box_coordinates: {text_box_coordinates}")
+            raise ValueError(error_msg)
+        
+        # Extract the coordinates and prepare the texts
+        coordinates = []
+        texts = []
+        
+        # Log the text boxes for debugging
+        logger.info(f"Text boxes: {meme['text_boxes']}")
+        
+        # Process each text box coordinate
+        logger.info(f"Processing {len(text_box_coordinates)} text box coordinates")
+        for i, box in enumerate(text_box_coordinates):
+            try:
+                logger.info(f"Processing box {i}: {type(box)} - {box}")
+                box_id = None
+                box_coords = {}
+                
+                # Handle different formats of text_box_coordinates
+                if isinstance(box, dict):
+                    logger.info(f"Box is a dictionary with keys: {box.keys()}")
+                    box_id = box.get('id')
+                    logger.info(f"Found box_id from dict: {box_id}")
+                    if box_id is not None:
+                        box_coords = {
+                            'x': float(box.get('x', 0)),
+                            'y': float(box.get('y', 0)),
+                            'width': float(box.get('width', 20)),
+                            'height': float(box.get('height', 10))
+                        }
+                        logger.info(f"Created box_coords from dict: {box_coords}")
+                elif isinstance(box, list) and len(box) >= 5:
+                    # Assuming format: [id, label, x, y, width, height]
+                    logger.info(f"Box is a list with length: {len(box)}")
+                    box_id = box[0]
+                    logger.info(f"Found box_id from list: {box_id}")
+                    if box_id is not None:
+                        box_coords = {
+                            'x': float(box[2]) if len(box) > 2 else 0,
+                            'y': float(box[3]) if len(box) > 3 else 0,
+                            'width': float(box[4]) if len(box) > 4 else 20,
+                            'height': float(box[5]) if len(box) > 5 else 10
+                        }
+                        logger.info(f"Created box_coords from list: {box_coords}")
+                
+                # If we couldn't extract a box_id using the standard methods, try a more flexible approach
+                if box_id is None and isinstance(box, dict):
+                    # Look for any key that might contain 'id'
+                    for key in box.keys():
+                        if 'id' in key.lower():
+                            box_id = box[key]
+                            logger.info(f"Found box_id from alternative key '{key}': {box_id}")
+                            break
+                    
+                    # If we found an id but don't have coordinates, look for coordinate keys
+                    if box_id is not None and not box_coords:
+                        x_key = next((k for k in box.keys() if 'x' == k.lower()), None)
+                        y_key = next((k for k in box.keys() if 'y' == k.lower()), None)
+                        width_key = next((k for k in box.keys() if 'width' in k.lower()), None)
+                        height_key = next((k for k in box.keys() if 'height' in k.lower()), None)
+                        
+                        if x_key and y_key:
+                            box_coords = {
+                                'x': float(box.get(x_key, 0)),
+                                'y': float(box.get(y_key, 0)),
+                                'width': float(box.get(width_key, 20)) if width_key else 20,
+                                'height': float(box.get(height_key, 10)) if height_key else 10
+                            }
+                            logger.info(f"Created box_coords from alternative keys: {box_coords}")
+                
+                if box_id is not None:
+                    # Convert box_id to int and adjust for 0-based indexing
+                    try:
+                        box_index = int(box_id) - 1
+                        logger.info(f"Processing box with id {box_id}, index {box_index}")
+                        
+                        if 0 <= box_index < len(meme["text_boxes"]):
+                            # Get text from the appropriate index
+                            text = meme["text_boxes"][box_index]
+                            # Add the text and coordinates even if text is None or empty
+                            # This ensures we maintain the correct positioning for all text boxes
+                            logger.info(f"Adding text for box {box_id}: '{text}'")
+                            texts.append(text if text else "")  # Use empty string if text is None
+                            coordinates.append(box_coords)
+                        else:
+                            logger.warning(f"Box index {box_index} out of range for text_boxes (length: {len(meme['text_boxes'])})")
+                    except ValueError as ve:
+                        logger.error(f"Error converting box_id to int: {ve}")
+                        # Try to handle non-integer IDs by using the position in the array
+                        logger.info(f"Falling back to using position {i} as index")
+                        if i < len(meme["text_boxes"]):
+                            text = meme["text_boxes"][i]
+                            logger.info(f"Adding text for position {i}: '{text}'")
+                            texts.append(text if text else "")
+                            coordinates.append(box_coords)
+                else:
+                    # If we couldn't extract a box_id, try using the position in the array
+                    logger.info(f"No box_id found, using position {i} as index")
+                    if i < len(meme["text_boxes"]):
+                        text = meme["text_boxes"][i]
+                        logger.info(f"Adding text for position {i}: '{text}'")
+                        texts.append(text if text else "")
+                        coordinates.append(box_coords)
+            except Exception as e:
+                logger.error(f"Error processing text box coordinate: {str(e)}")
+                logger.error(f"Box: {box}")
+                # Continue processing other boxes
         
         # Add text to the image
-        # For simplicity, we'll use the first two text boxes as top and bottom text
-        top_text = meme["text_boxes"][0] or ""
-        bottom_text = meme["text_boxes"][1] or ""
-        logger.info(f"Adding text to meme: top='{top_text}', bottom='{bottom_text}'")
-        overlay.add_meme_text(top_text, bottom_text)
+        if not coordinates:
+            error_msg = "No valid text box coordinates found for template"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        logger.info(f"Adding {len(texts)} text boxes at specific coordinates")
+        overlay.add_text_at_coordinates(texts, coordinates)
         
         if timing:
             timing.end(f"text_overlay_{meme['uuid']}")
@@ -657,6 +845,31 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
             templates = find_similar_templates(goal, timing=timing)
             logger.info(f"Found similar templates for goal '{goal.get('goal', '')}': {json.dumps(templates, indent=2)}")
             
+            # Process text_box_coordinates for each template
+            for template in templates:
+                if template.get('text_box_coordinates'):
+                    raw_coordinates_value = template.get('text_box_coordinates')
+                    logger.info(f"Raw value from db for text_box_coordinates is:\n{raw_coordinates_value}")
+                    try:
+                        if isinstance(template['text_box_coordinates'], list) and len(template['text_box_coordinates']) > 0:
+                            if isinstance(template['text_box_coordinates'][0], str):
+                                template['text_box_coordinates'] = json.loads(template['text_box_coordinates'][0])
+                                logger.info(json.dumps(template['text_box_coordinates'], indent=2, sort_keys=True))
+                                logger.info(f"Processed text_box_coordinates for template {template.get('name', 'unknown')}")
+                            elif isinstance(template['text_box_coordinates'][0], list):
+                                # Handle case where text_box_coordinates is a list of lists
+                                template['text_box_coordinates'] = template['text_box_coordinates'][0]
+                                logger.info(json.dumps(template['text_box_coordinates'], indent=2, sort_keys=True))
+                                logger.info(f"Processed nested list text_box_coordinates for template {template.get('name', 'unknown')}")
+                            else:
+                                logger.warning(f"Failed at the second, inner isinstance() check for text_box_coordinates data")
+                        else:
+                            logger.warning(f"Failed at the first isinstance() check of text_box_coordinates data")
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing text_box_coordinates for template {template.get('name', 'unknown')}: {str(e)}")
+                        template['text_box_coordinates'] = []
+            
             # Generate text for all templates in parallel
             template_results = await batch_generate_texts(templates, goal, context, timing)
             
@@ -674,8 +887,11 @@ async def generate_memes_for_uuids(context: str, uuids: List[str]) -> List[dict]
                     # Convert text choice to array format
                     text_boxes = [None] * 7  # Initialize with 7 None values
                     for i in range(1, 8):
+                        # Check for both formats: text1, text2, etc. and text_1, text_2, etc.
                         if f"text{i}" in choice:
                             text_boxes[i-1] = choice[f"text{i}"]
+                        elif f"text_{i}" in choice:
+                            text_boxes[i-1] = choice[f"text_{i}"]
                     
                     try:
                         if "id" not in template:

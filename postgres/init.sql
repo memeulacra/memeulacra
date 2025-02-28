@@ -13,8 +13,12 @@ CREATE TABLE meme_templates (
     tags TEXT[],
     popularity_score FLOAT DEFAULT 0,
     embedding VECTOR(1024),  -- BGE model outputs 1024-dimensional embeddings
+    text_box_coordinates JSONB[],  -- Array of {box_number, x, y, width, height} objects as percentages
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add comment explaining text_box_coordinates format
+COMMENT ON COLUMN meme_templates.text_box_coordinates IS 'Array of JSON objects with format: [{"box_number": 1, "x": 10, "y": 5, "width": 80, "height": 20}, ...]. Coordinates are percentages of image dimensions.';
 
 -- Create index for similarity search on meme_templates
 CREATE INDEX meme_templates_embedding_idx ON meme_templates USING ivfflat (embedding vector_l2_ops);
@@ -69,6 +73,7 @@ CREATE INDEX ON user_interactions(meme_id);
 
 -- Create vector similarity search index for meme templates
 CREATE INDEX ON meme_templates USING ivfflat (embedding vector_cosine_ops);
+
 
 
 -- Create sessions table - uses UUID for consistency with your schema
