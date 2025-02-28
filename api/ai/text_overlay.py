@@ -225,7 +225,7 @@ class TextOverlay:
             x_offset = x
             
             # Draw outline with 8-directional offsets
-            outline_offsets = [(dx, dy) for dx in (-2,-1,0,1,2) for dy in (-2,-1,0,1,2)]
+            outline_offsets = [(dx, dy) for dx in (-3,-2,-1,0,1,2,3) for dy in (-3,-2,-1,0,1,2,3)]
             for dx, dy in outline_offsets:
                 self.draw.text((x_offset+dx, current_y+dy), line, font=font, fill="black")
             
