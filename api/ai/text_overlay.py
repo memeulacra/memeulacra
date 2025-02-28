@@ -23,7 +23,7 @@ logger.info(f"TextOverlay: Overriding CDN base URL from {env_cdn_url} to {CDN_BA
 # Constants for text rendering
 MIN_FALLBACK_FONT_SIZE = 40  # Fallback font size if no size fits
 MAX_FONT_SIZE = 200  # Maximum font size to try
-MIN_FONT_SIZE = 30   # Minimum font size to try
+MIN_FONT_SIZE = 10   # Minimum font size to try
 MAX_CHARS_PER_LINE = 15
 
 class TextOverlay:
@@ -162,8 +162,12 @@ class TextOverlay:
                 if len(text_lines) > 1:
                     total_height += (len(text_lines) - 1) * (line_height * 0.2)
                 
-                if total_height <= box_height:
+                # Apply safety factor to ensure text fits within box height
+                adjusted_height = total_height * 1.2  # Add 20% safety margin
+                
+                if adjusted_height <= box_height:
                     logger.info(f"Found optimal font size: {font_size} for text with {len(text_lines)} lines")
+                    logger.info(f"Raw height: {total_height}px, Adjusted height: {adjusted_height:.1f}px, Box height: {box_height}px")
                     return font, text_lines, total_height
         
         # If we get here, use the minimum fallback font size
