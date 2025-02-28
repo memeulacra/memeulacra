@@ -545,7 +545,9 @@ async def process_meme_image(template_image_url: str, meme: dict, timing: Timing
         logger.info(f"Creating text overlay for template image: {template_image_url}")
         if timing:
             timing.start(f"text_overlay_{meme['uuid']}")
-        overlay = TextOverlay(template_image_url)
+        # Enable debug boxes to visualize text areas
+        debug_boxes = os.getenv("DEBUG_TEXT_BOXES", "false").lower() == "true"
+        overlay = TextOverlay(template_image_url, debug_boxes=debug_boxes)
         
         # Check if we have text box coordinates for this template
         template_id = meme.get("template_id")

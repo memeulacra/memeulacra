@@ -21,11 +21,13 @@ env_cdn_url = os.getenv('CDN_BASE_URL', 'https://memes.supertech.ai')
 logger.info(f"TextOverlay: Overriding CDN base URL from {env_cdn_url} to {CDN_BASE_URL}")
 
 # Constants for text rendering
-MIN_FONT_SIZE = 500
-MAX_CHARS_PER_LINE = 30
+MIN_FALLBACK_FONT_SIZE = 40  # Fallback font size if no size fits
+MAX_FONT_SIZE = 200  # Maximum font size to try
+MIN_FONT_SIZE = 30   # Minimum font size to try
+MAX_CHARS_PER_LINE = 15
 
 class TextOverlay:
-    def __init__(self, image_url: str):
+    def __init__(self, image_url: str, debug_boxes: bool = False):
         """Initialize text overlay with a meme template image URL.
         
         Args:
@@ -66,30 +68,35 @@ class TextOverlay:
             
         self.draw = ImageDraw.Draw(self.base_image)
         self.width, self.height = self.base_image.size
+        self.debug_boxes = debug_boxes
         
-        # Default to Impact font if available, otherwise use default system font
-        self.font_path = "/System/Library/Fonts/Supplemental/Impact.ttf"
+        # First check for the bundled font in the project
+        self.font_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts", "impact.ttf")
         if not os.path.exists(self.font_path):
-            # Try alternative paths for different operating systems
-            alt_paths = [
-                "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",  # Linux with msttcorefonts
-                "C:\\Windows\\Fonts\\Impact.ttf",  # Windows
-                # Add more paths as needed
-            ]
-            for path in alt_paths:
-                if os.path.exists(path):
-                    self.font_path = path
-                    break
-            else:
-                logger.warning("Impact font not found, using default font")
-                self.font_path = None
+            # Fall back to system paths if the bundled font is not found
+            self.font_path = "/System/Library/Fonts/Supplemental/Impact.ttf"
+            if not os.path.exists(self.font_path):
+                # Try alternative paths for different operating systems
+                alt_paths = [
+                    "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",  # Linux with msttcorefonts
+                    "C:\\Windows\\Fonts\\Impact.ttf",  # Windows
+                    # Add more paths as needed
+                ]
+                for path in alt_paths:
+                    if os.path.exists(path):
+                        self.font_path = path
+                        break
+                else:
+                    logger.warning("Impact font not found, using default font")
+                    self.font_path = None
 
-    def wrap_text(self, text: str, max_chars_per_line: int) -> list:
-        """Wrap text to fit within a certain number of characters per line.
+    def wrap_text(self, text: str, max_width: int, font) -> list:
+        """Wrap text to fit within a certain width based on the font.
         
         Args:
             text: Text to wrap
-            max_chars_per_line: Maximum characters per line
+            max_width: Maximum width in pixels
+            font: Font to use for measuring text width
             
         Returns:
             List of text lines
@@ -97,19 +104,23 @@ class TextOverlay:
         words = text.split()
         lines = []
         current_line = []
-        current_length = 0
         
         for word in words:
-            # Check if adding this word would exceed the max chars per line
-            if current_length + len(word) + len(current_line) <= max_chars_per_line:
+            # Try adding this word to the current line
+            test_line = ' '.join(current_line + [word]) if current_line else word
+            
+            # Measure the width of the test line
+            left, top, right, bottom = self.draw.textbbox((0, 0), test_line, font=font)
+            line_width = right - left
+            
+            # Check if adding this word would exceed the max width
+            if line_width <= max_width:
                 current_line.append(word)
-                current_length += len(word)
             else:
                 # Start a new line
                 if current_line:  # Only add if there are words in the current line
                     lines.append(' '.join(current_line))
                 current_line = [word]
-                current_length = len(word)
         
         # Add the last line if it's not empty
         if current_line:
@@ -117,21 +128,24 @@ class TextOverlay:
             
         return lines
 
-    def calculate_optimal_font(self, text_lines: list, box_width: int, box_height: int, max_font: int = 100) -> tuple:
+    def calculate_optimal_font(self, text: str, box_width: int, box_height: int, max_font: int = MAX_FONT_SIZE) -> tuple:
         """Calculate the optimal font size to fit text in a given box.
         
         Args:
-            text_lines: List of text lines to render
+            text: Text to render
             box_width: Maximum width of the text box
             box_height: Maximum height of the text box
             max_font: Maximum font size to try
             
         Returns:
-            Tuple of (ImageFont, total_height)
+            Tuple of (ImageFont, text_lines, total_height)
         """
         if self.font_path:
             for font_size in range(max_font, MIN_FONT_SIZE - 1, -1):
                 font = ImageFont.truetype(self.font_path, font_size)
+                
+                # Wrap text based on the box width and current font
+                text_lines = self.wrap_text(text, box_width, font)
                 
                 # Calculate total height and maximum width
                 total_height = 0
@@ -148,14 +162,17 @@ class TextOverlay:
                 if len(text_lines) > 1:
                     total_height += (len(text_lines) - 1) * (line_height * 0.2)
                 
-                if max_width <= box_width and total_height <= box_height:
-                    return font, total_height
+                if total_height <= box_height:
+                    logger.info(f"Found optimal font size: {font_size} for text with {len(text_lines)} lines")
+                    return font, text_lines, total_height
         
-        # If we get here, use the minimum font size
-        font = ImageFont.truetype(self.font_path, MIN_FONT_SIZE) if self.font_path else ImageFont.load_default()
-        return font, 0
+        # If we get here, use the minimum fallback font size
+        logger.info(f"No suitable font size found, using fallback size: {MIN_FALLBACK_FONT_SIZE}")
+        font = ImageFont.truetype(self.font_path, MIN_FALLBACK_FONT_SIZE) if self.font_path else ImageFont.load_default()
+        text_lines = self.wrap_text(text, box_width, font)
+        return font, text_lines, 0
 
-    def render_outlined_text(self, text: str, position: tuple, box_size: tuple) -> None:
+    def render_outlined_text(self, text: str, position: tuple, box_size: tuple, box_id: int = None) -> None:
         """Render text with outline at the specified position.
         
         Args:
@@ -163,14 +180,13 @@ class TextOverlay:
             position: (x, y) coordinates for text box
             box_size: (width, height) of the text box
         """
+        logger.info(f"Rendering text: '{text}' at position {position} with box size {box_size}, box_id: {box_id}")
         x, y = position
         box_w, box_h = box_size
         
-        # Wrap text if it's too long
-        text_lines = self.wrap_text(text, MAX_CHARS_PER_LINE)
-        
-        # Calculate optimal font size for wrapped text
-        font, total_height = self.calculate_optimal_font(text_lines, box_w, box_h)
+        # Calculate optimal font size and get wrapped text lines
+        logger.info(f"Calculating optimal font for text in box of size {box_w}x{box_h}")
+        font, text_lines, total_height = self.calculate_optimal_font(text, box_w, box_h)
         
         # Get the height of a single line with this font
         test_line = text_lines[0]
@@ -180,9 +196,19 @@ class TextOverlay:
         # Calculate line spacing (20% of line height)
         line_spacing = line_height * 0.2
         
-        # Calculate starting y position to center the text block vertically
-        total_text_height = total_height + (len(text_lines) - 1) * line_spacing
-        y_start = y + (box_h - total_text_height) // 2
+        # Start text from the top of the box instead of centering vertically
+        y_start = y
+        
+        # Draw debug box if enabled
+        if self.debug_boxes:
+            # Draw a rectangle around the text box
+            self.draw.rectangle([(x, y), (x + box_w, y + box_h)], outline="red", width=3)
+            
+            # Add box ID if provided
+            if box_id is not None:
+                # Draw box ID in the top-left corner
+                id_font = ImageFont.truetype(self.font_path, 30) if self.font_path else ImageFont.load_default()
+                self.draw.text((x + 5, y + 5), f"Box {box_id}", fill="red", font=id_font)
         
         # Draw each line of text
         current_y = y_start
@@ -191,8 +217,8 @@ class TextOverlay:
             left, top, right, bottom = self.draw.textbbox((0, 0), line, font=font)
             line_width = right - left
             
-            # Center this line horizontally
-            x_offset = x + (box_w - line_width) // 2
+            # Align text to the left of the box instead of centering horizontally
+            x_offset = x
             
             # Draw outline with 8-directional offsets
             outline_offsets = [(dx, dy) for dx in (-2,-1,0,1,2) for dy in (-2,-1,0,1,2)]
@@ -263,7 +289,7 @@ class TextOverlay:
                 height = int((height_percent / 100) * self.height)
                 
                 logger.info(f"Rendering text at coordinates: x={x}, y={y}, width={width}, height={height}")
-                self.render_outlined_text(text, (x, y), (width, height))
+                self.render_outlined_text(text, (x, y), (width, height), box_id=i+1)
             except ValueError as e:
                 error_msg = f"Invalid coordinate values for box {i+1}: {str(e)}"
                 logger.error(error_msg)

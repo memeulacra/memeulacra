@@ -58,27 +58,19 @@ export default function MemeEditor() {
     const containerWidth = containerRef.current?.clientWidth || 0
     const containerHeight = containerRef.current?.clientHeight || 0
 
-    // Calculate what percentage of the container width/height the image takes up
-    const imageWidthPercent = (renderedWidth / containerWidth) * 100
-    const imageHeightPercent = (renderedHeight / containerHeight) * 100
-    
+    // Calculate the scaling factors
+    const scaleX = 100 / (renderedWidth / containerWidth * 100)
+    const scaleY = 100 / (renderedHeight / containerHeight * 100)
+
     // Calculate the offsets as percentages of the container
     const offsetXPercent = (offsetX / containerWidth) * 100
     const offsetYPercent = (offsetY / containerHeight) * 100
 
-    // First, adjust for the offset to get coordinates relative to the image's top-left corner
-    const relativeX = box.x - offsetXPercent
-    const relativeY = box.y - offsetYPercent
-    
-    // Then scale to convert from container percentage to image percentage
-    // If the image takes up 50% of the container width, then 50% container width = 100% image width
-    const scaleX = 100 / imageWidthPercent
-    const scaleY = 100 / imageHeightPercent
-    
+    // Transform the coordinates
     return {
       ...box,
-      x: relativeX * scaleX,
-      y: relativeY * scaleY,
+      x: (box.x - offsetXPercent) * scaleX,
+      y: (box.y - offsetYPercent) * scaleY,
       width: box.width * scaleX,
       height: box.height * scaleY
     }
@@ -92,23 +84,19 @@ export default function MemeEditor() {
     const containerWidth = containerRef.current?.clientWidth || 0
     const containerHeight = containerRef.current?.clientHeight || 0
 
-    // Calculate what percentage of the container width/height the image takes up
-    const imageWidthPercent = (renderedWidth / containerWidth) * 100
-    const imageHeightPercent = (renderedHeight / containerHeight) * 100
-    
+    // Calculate the scaling factors
+    const scaleX = (renderedWidth / containerWidth * 100) / 100
+    const scaleY = (renderedHeight / containerHeight * 100) / 100
+
     // Calculate the offsets as percentages of the container
     const offsetXPercent = (offsetX / containerWidth) * 100
     const offsetYPercent = (offsetY / containerHeight) * 100
 
-    // First, scale from image percentage to container percentage
-    const scaleX = imageWidthPercent / 100
-    const scaleY = imageHeightPercent / 100
-    
-    // Then add the offset to position correctly within the container
+    // Transform the coordinates
     return {
       ...box,
-      x: (box.x * scaleX) + offsetXPercent,
-      y: (box.y * scaleY) + offsetYPercent,
+      x: box.x * scaleX + offsetXPercent,
+      y: box.y * scaleY + offsetYPercent,
       width: box.width * scaleX,
       height: box.height * scaleY
     }
@@ -535,7 +523,7 @@ export default function MemeEditor() {
         <div
           ref={containerRef}
           className="relative border border-gray-300 mb-4"
-          style={{ width: "100%", height: "100%" }}
+          style={{ width: "100%", height: "500px" }}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
