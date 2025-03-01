@@ -1,0 +1,279 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# UV
+#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#uv.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+# PyPI configuration file
+.pypirc
+.DS_Store
+tests/watermark_demo_custom.jpg
+tests/watermark_demo_no_watermark.jpg
+tests/watermark_demo_with_watermark.jpg
+tests/watermarked_output.jpg
+tests/watermarked_output/10-Guy.jpg
+tests/watermarked_output/Aaaaand-Its-Gone.jpg
+tests/watermarked_output/Aint-Nobody-Got-Time-For-That.jpg
+tests/watermarked_output/Am-I-The-Only-One-Around-Here.jpg
+tests/watermarked_output/American-Chopper-Argument.jpg
+tests/watermarked_output/Ancient-Aliens.jpg
+tests/watermarked_output/And-everybody-loses-their-minds.jpg
+tests/watermarked_output/Archer.jpg
+tests/watermarked_output/Awkward-Moment-Sealion.jpg
+tests/watermarked_output/Back-In-My-Day.jpg
+tests/watermarked_output/Bad-Luck-Brian.jpg
+tests/watermarked_output/Bad-Pun-Dog.jpg
+tests/watermarked_output/Batman-Slapping-Robin.jpg
+tests/watermarked_output/Be-Like-Bill.jpg
+tests/watermarked_output/Bernie-I-Am-Once-Again-Asking-For-Your-Support.jpg
+tests/watermarked_output/Black-Girl-Wat.jpg
+tests/watermarked_output/Blank-Nut-Button.jpg
+tests/watermarked_output/Boardroom-Meeting-Suggestion.jpg
+tests/watermarked_output/Brace-Yourselves-X-is-Coming.jpg
+tests/watermarked_output/But-Thats-None-Of-My-Business.jpg
+tests/watermarked_output/Captain-Picard-Facepalm.jpg
+tests/watermarked_output/Change-My-Mind.jpg
+tests/watermarked_output/Confession-Bear.jpg
+tests/watermarked_output/Conspiracy-Keanu.jpg
+tests/watermarked_output/Creepy-Condescending-Wonka.jpg
+tests/watermarked_output/Disaster-Girl.jpg
+tests/watermarked_output/Distracted-Boyfriend.jpg
+tests/watermarked_output/Doge.jpg
+tests/watermarked_output/Dont-You-Squidward.jpg
+tests/watermarked_output/Dr-Evil-Laser.jpg
+tests/watermarked_output/Drake-Hotline-Bling.jpg
+tests/watermarked_output/Epic-Handshake.jpg
+tests/watermarked_output/Evil-Kermit.jpg
+tests/watermarked_output/Evil-Toddler.jpg
+tests/watermarked_output/Expanding-Brain.jpg
+tests/watermarked_output/Face-You-Make-Robert-Downey-Jr.jpg
+tests/watermarked_output/Finding-Neverland.jpg
+tests/watermarked_output/First-World-Problems.jpg
+tests/watermarked_output/Futurama-Fry.jpg
+tests/watermarked_output/Grandma-Finds-The-Internet.jpg
+tests/watermarked_output/Grumpy-Cat.jpg
+tests/watermarked_output/Hard-To-Swallow-Pills.jpg
+tests/watermarked_output/Hide-the-Pain-Harold.jpg
+tests/watermarked_output/I-Should-Buy-A-Boat-Cat.jpg
+tests/watermarked_output/Ill-Just-Wait-Here.jpg
+tests/watermarked_output/Imagination-Spongebob.jpg
+tests/watermarked_output/Inhaling-Seagull.jpg
+tests/watermarked_output/Is-This-A-Pigeon.jpg
+tests/watermarked_output/Jack-Sparrow-Being-Chased.jpg
+tests/watermarked_output/Laughing-Men-In-Suits.jpg
+tests/watermarked_output/Left-Exit-12-Off-Ramp.jpg
+tests/watermarked_output/Leonardo-Dicaprio-Cheers.jpg
+tests/watermarked_output/Look-At-Me.jpg
+tests/watermarked_output/Marked-Safe-From.jpg
+tests/watermarked_output/Matrix-Morpheus.jpg
+tests/watermarked_output/Maury-Lie-Detector.jpg
+tests/watermarked_output/Mocking-Spongebob.jpg
+tests/watermarked_output/Monkey-Puppet.jpg
+tests/watermarked_output/Mugatu-So-Hot-Right-Now.jpg
+tests/watermarked_output/One-Does-Not-Simply.jpg
+tests/watermarked_output/Oprah-You-Get-A.jpg
+tests/watermarked_output/Philosoraptor.jpg
+tests/watermarked_output/Picard-Wtf.jpg
+tests/watermarked_output/Put-It-Somewhere-Else-Patrick.jpg
+tests/watermarked_output/Roll-Safe-Think-About-It.jpg
+tests/watermarked_output/Running-Away-Balloon.jpg
+tests/watermarked_output/Sad-Pablo-Escobar.jpg
+tests/watermarked_output/Say-That-Again-I-Dare-You.jpg
+tests/watermarked_output/Scumbag-Steve.jpg
+tests/watermarked_output/See-Nobody-Cares.jpg
+tests/watermarked_output/Skeptical-Baby.jpg
+tests/watermarked_output/Sparta-Leonidas.jpg
+tests/watermarked_output/Spongebob-Ight-Imma-Head-Out.jpg
+tests/watermarked_output/Star-Wars-Yoda.jpg
+tests/watermarked_output/Steve-Harvey.jpg
+tests/watermarked_output/Success-Kid.jpg
+tests/watermarked_output/Surprised-Pikachu.jpg
+tests/watermarked_output/That-Would-Be-Great.jpg
+tests/watermarked_output/The-Most-Interesting-Man-In-The-World.jpg
+tests/watermarked_output/The-Rock-Driving.jpg
+tests/watermarked_output/The-Scroll-Of-Truth.jpg
+tests/watermarked_output/Third-World-Skeptical-Kid.jpg
+tests/watermarked_output/Third-World-Success-Kid.jpg
+tests/watermarked_output/This-Is-Where-Id-Put-My-Trophy-If-I-Had-One.jpg
+tests/watermarked_output/Too-Damn-High.jpg
+tests/watermarked_output/Trump-Bill-Signing.jpg
+tests/watermarked_output/Tuxedo-Winnie-The-Pooh.png
+tests/watermarked_output/Two-Buttons.jpg
+tests/watermarked_output/Uncle-Sam.jpg
+tests/watermarked_output/UNO-Draw-25-Cards.jpg
+tests/watermarked_output/Unsettled-Tom.jpg
+tests/watermarked_output/Waiting-Skeleton.jpg
+tests/watermarked_output/Who-Killed-Hannibal.jpg
+tests/watermarked_output/Who-Would-Win.jpg
+tests/watermarked_output/Woman-Yelling-At-Cat.jpg
+tests/watermarked_output/X-All-The-Y.jpg
+tests/watermarked_output/X-X-Everywhere.jpg
+tests/watermarked_output/Y-U-No.jpg
+tests/watermarked_output/Yall-Got-Any-More-Of-That.jpg
+tests/watermarked_output/Yo-Dawg-Heard-You.jpg
+memedb_backup_20250301_023206.sql.gz
+memedb_backup_20250301_023018.sql.gz
+api/ai/test_meme_output.png
+api/ai/test_meme_output.svg
