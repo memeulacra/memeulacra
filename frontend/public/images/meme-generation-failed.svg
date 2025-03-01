@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#2D3748" />
+
+  <!-- Grid pattern -->
+  <pattern id="grid" patternUnits="userSpaceOnUse" width="20" height="20" patternTransform="rotate(45)">
+    <rect width="2" height="20" fill="#4A5568" x="0" y="0" />
+  </pattern>
+  <rect width="800" height="600" fill="url(#grid)" opacity="0.2" />
+
+  <!-- Failed icon - Red circle with X -->
+  <circle cx="400" cy="300" r="80" fill="#F56565" opacity="0.9" />
+  <path d="M360 260 L440 340 M440 260 L360 340" stroke="white" stroke-width="12" stroke-linecap="round" />
+
+  <!-- Text -->
+  <text x="400" y="420" font-family="sans-serif" font-size="24" text-anchor="middle" fill="#E2E8F0">
+    Generation failed
+  </text>
+
+  <!-- Retry button shape -->
+  <rect x="325" y="450" width="150" height="50" rx="25" fill="#805AD5" />
+  <text x="400" y="482" font-family="sans-serif" font-size="20" text-anchor="middle" fill="white">
+    Try again
+  </text>
+</svg>
